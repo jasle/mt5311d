@@ -117,3 +117,19 @@ def test_received_requests_are_recorded(modem):
     modem.handle(HOST, b"\x00\x07\x01")  # malformed, not recorded
     assert [(r.host, r.request) for r in modem.received] == [(HOST, read([0x006C36], seq=5))]
     assert modem.received[0].time > 0
+
+
+def test_request_hooks_run_before_the_response(modem):
+    seen = []
+
+    def hook(received):
+        seen.append(received.request)
+        modem.line.showtime()
+
+    modem.on_request(hook)
+    assert send(modem, read([0x006C35])) == [(ReadResponse(1, 0x00, (0x000329,)), 0.0)]
+    assert seen == [read([0x006C35])]
+
+    modem.hooks.remove(hook)
+    send(modem, read([0x006C35]))
+    assert len(seen) == 1

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import protocol
@@ -28,7 +29,9 @@ class Modem:
 
     The transport passes every received message to handle(). Tests change the
     line through `line`, inject faults through `faults` and find every valid
-    request in `received`.
+    request in `received`. Hooks registered with on_request() run for every valid
+    request before it is answered, so that tests can change the modem at a point
+    of the client's traffic instead of at a point in time.
     """
 
     def __init__(self, firmware: Firmware = FIRMWARE_750202, role: Role = Role.RT,
@@ -37,6 +40,12 @@ class Modem:
         self.line = Line(self.device)
         self.faults = Faults(self.device)
         self.received: list[Received] = []
+        self.hooks: list[Callable[[Received], None]] = []
+
+    def on_request(self, hook: Callable[[Received], None]) -> Callable[[Received], None]:
+        """Registers a hook; it can be removed again from `hooks`."""
+        self.hooks.append(hook)
+        return hook
 
     def handle(self, host: bytes, message: bytes) -> list[Reply]:
         """Processes one message; returns the replies to send."""
@@ -45,7 +54,10 @@ class Modem:
         except protocol.ProtocolError as e:
             log.debug("ignoring message from %s: %s", host.hex(":"), e)
             return []
-        self.received.append(Received(time.monotonic(), host, request))
+        received = Received(time.monotonic(), host, request)
+        self.received.append(received)
+        for hook in list(self.hooks):
+            hook(received)
         return self.faults.respond(host, request)
 
     def reboot(self, firmware: Firmware | None = None) -> None:
