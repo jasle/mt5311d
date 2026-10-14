@@ -59,6 +59,10 @@ class Ucode:
         except json.JSONDecodeError as e:
             raise UcodeError(f"ucode output is not a JSON value: {stdout!r}") from e
 
+    def run_script(self, path: Path, *args: str) -> str:
+        """Runs a script of the repository with command line arguments; returns stdout."""
+        return self._exec([str(container_path(path)), *args])
+
     def call(self, module: str, function: str, *args: Any) -> Any:
         """Calls an exported function of a module with JSON arguments."""
         if not _MODULE_NAME.match(module):

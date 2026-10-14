@@ -10,6 +10,18 @@ on the protocol specification
 [`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md). A modem simulator for
 development and tests is in [`sim/`](sim/README.md).
 
+## Diagnostics
+
+[`tools/mt5311-probe.uc`](tools/mt5311-probe.uc) reads a modem once and prints the
+firmware, the selected address layout and all values mt5311d knows as JSON. It only
+sends CONNECT and READ requests. On a router with `ucode-mod-socket`,
+`ucode-mod-struct` and `ucode-mod-uloop`:
+
+```sh
+scp -O -r src tools root@router:/tmp/mt5311d/
+ssh root@router "ucode -L '/tmp/mt5311d/src/*.uc' /tmp/mt5311d/tools/mt5311-probe.uc <interface> <modem-mac>"
+```
+
 ## Development
 
 The daemon is written in [ucode](https://github.com/jow-/ucode). Its tests run with
