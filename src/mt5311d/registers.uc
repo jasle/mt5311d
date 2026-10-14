@@ -19,6 +19,7 @@ const REGISTERS = {
 	xdslBoardType:                       [ 0x006c34, 0x006c34, 1 ],
 	xdslTerminal:                        [ 0x006c35, 0x006c35, 1 ],
 	xdslMetanoiaSignature:               [ 0x006c36, 0x006c36, 1 ],
+	xdslTwConfig3:                       [ 0x006e6f, 0x006e87, 1 ],
 
 	// Layout check constants (8.2)
 	xdsl2LineBand6:                      [ 0x006fef, 0x007004, 1 ],
@@ -66,6 +67,12 @@ const REGISTERS = {
 	xdsl2ChStatusActDataRate2:           [ 0x007020, 0x007035, 1 ],
 	xdsl2ChStatusActDelay2:              [ 0x007022, 0x007037, 1 ],
 	xdsl2ChStatusActInp2:                [ 0x007023, 0x007038, 1 ],
+
+	// Inventory (A.4): index 0 is the xTU-C, index 1 the xTU-R
+	xdsl2LInvG994VendorId0:              [ 0x0079c8, 0x0079dd, 3 ],
+	xdsl2LInvVersionNumber0:             [ 0x0079ce, 0x0079e3, 6 ],
+	xdsl2LInvG994VendorId1:              [ 0x0079e4, 0x0079f9, 3 ],
+	xdsl2LInvVersionNumber1:             [ 0x0079ea, 0x0079ff, 6 ],
 
 	// Counters of the xTU-R (A.5, 9.1)
 	xdslMetanoiaShowtimeSeconds:         [ 0x006d35, 0x006d35, 1 ],

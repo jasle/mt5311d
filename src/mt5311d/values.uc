@@ -26,6 +26,7 @@ const FORMATS = {
 	xdslBoardType:                       { class: 'I' },
 	xdslTerminal:                        { class: 'E' },
 	xdslMetanoiaSignature:               { class: 'I' },
+	xdslTwConfig3:                       { class: 'K' },
 
 	xdsl2LineBand6:                      { class: 'E' },
 	xdsl2LineBand7:                      { class: 'E' },
@@ -70,6 +71,11 @@ const FORMATS = {
 	xdsl2ChStatusActDataRate2:           { class: 'M', signed: false, div: 1, unit: 'kbit/s' },
 	xdsl2ChStatusActDelay2:              { class: 'M', signed: false, div: 1, unit: 'ms' },
 	xdsl2ChStatusActInp2:                { class: 'M', signed: false, div: 10, unit: 'symbols' },
+
+	xdsl2LInvG994VendorId0:              { class: 'I' },
+	xdsl2LInvVersionNumber0:             { class: 'I' },
+	xdsl2LInvG994VendorId1:              { class: 'I' },
+	xdsl2LInvVersionNumber1:             { class: 'I' },
 
 	xdslMetanoiaShowtimeSeconds:         { class: 'C' },
 	xdslMetanoiaRtCurrCodingViolations0: { class: 'C' },
@@ -280,7 +286,80 @@ export function init_result(word) {
 	return enumeration(INIT_RESULTS, word);
 };
 
-// Decoders of the registers of class E and I that have one.
+// Bytes of a sequence of words, most significant byte first (7.2).
+function octets(words) {
+	let bytes = '';
+
+	for (let word in words)
+		bytes += chr(word >> 16, (word >> 8) & 0xff, word & 0xff);
+
+	return bytes;
+}
+
+// Byte-wise checks; regular expressions stop at the first zero byte.
+function all_bytes(bytes, min, max) {
+	for (let i = 0; i < length(bytes); i++)
+		if (ord(bytes, i) < min || ord(bytes, i) > max)
+			return false;
+
+	return true;
+}
+
+function is_printable(text) {
+	return all_bytes(text, 0x20, 0x7e);
+}
+
+// G.994.1 vendor ID (9.2.5), 3 words: T.35 country code, provider code (4 ASCII
+// characters) and vendor-specific information. null if all bytes are zero, as
+// before the handshake. raw holds the 8 bytes in hex.
+export function vendor_id(words) {
+	const bytes = substr(octets(words), 0, 8);
+
+	if (all_bytes(bytes, 0, 0))
+		return null;
+
+	const provider = substr(bytes, 2, 4);
+
+	return {
+		country: hexenc(substr(bytes, 0, 2)),
+		provider: is_printable(provider) ? provider : null,
+		specific: hexenc(substr(bytes, 6, 2)),
+		raw: hexenc(bytes),
+	};
+};
+
+const TWCONFIG3_ASCII_VERSION = 1 << 19;
+const BASE62 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+// Version number of an xTU (9.2.4), 6 words. Bit 19 of xdslTwConfig3 selects
+// ASCII text or the base-62 format d0_d1d2_d3d4_d5d6. null if empty or invalid.
+export function version_number(words, twconfig3) {
+	const bytes = octets(words);
+
+	if (twconfig3 & TWCONFIG3_ASCII_VERSION) {
+		const nul = index(bytes, '\x00');
+		const text = rtrim(nul >= 0 ? substr(bytes, 0, nul) : bytes, ' ');
+
+		return (length(text) && is_printable(text)) ? text : null;
+	}
+
+	const digits = [];
+
+	for (let i = 0; i < 7; i++) {
+		const digit = index(BASE62, substr(bytes, i, 1));
+
+		if (digit < 0)
+			return null;
+
+		push(digits, digit);
+	}
+
+	return sprintf('%d_%d_%d_%d', digits[0], digits[1] * 62 + digits[2],
+	               digits[3] * 62 + digits[4], digits[5] * 62 + digits[6]);
+};
+
+// Decoders of the registers of class E and I that have one. The version numbers
+// also need xdslTwConfig3; callers use version_number() for them.
 const DECODERS = {
 	xdslTerminal: terminal,
 	xdsl2MetanoiaRtFailureReasons: failure_reason,
@@ -293,6 +372,8 @@ const DECODERS = {
 	xdsl2LineStatusActSnrModeDs: snr_mode,
 	xdsl2LineStatusActSnrModeUs: snr_mode,
 	xdsl2LineStatusInitResult: init_result,
+	xdsl2LInvG994VendorId0: vendor_id,
+	xdsl2LInvG994VendorId1: vendor_id,
 };
 
 // Decodes the words of a register according to its value class.

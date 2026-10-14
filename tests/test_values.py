@@ -335,3 +335,69 @@ def test_failure_reason_of_the_simulated_line(decode_all):
     assert decode_all(raw_words(modem, ["xdsl2MetanoiaRtFailureReasons"])) == {
         "xdsl2MetanoiaRtFailureReasons": {"value": 3, "name": "crc_errors"},
     }
+
+
+# Inventory (9.2.4, 9.2.5)
+
+ASCII_VERSION = 1 << 19
+
+
+def words_of(data: bytes, count: int) -> list[int]:
+    data = data.ljust(3 * count, b"\x00")
+    return [int.from_bytes(data[i:i + 3], "big") for i in range(0, 3 * count, 3)]
+
+
+@pytest.mark.parametrize(
+    ("words", "expected"),
+    [
+        # Observed on an RT device (9.2.5).
+        ([0xB50042, 0x44434D, 0x1CC000],
+         {"country": "b500", "provider": "BDCM", "specific": "1cc0", "raw": "b5004244434d1cc0"}),
+        ([0xB5004D, 0x455441, 0x000000],
+         {"country": "b500", "provider": "META", "specific": "0000", "raw": "b5004d4554410000"}),
+        ([0xB50000, 0x410000, 0x000000],
+         {"country": "b500", "provider": None, "specific": "0000", "raw": "b500004100000000"}),
+        ([0, 0, 0], None),
+    ],
+)
+def test_vendor_id(values, words, expected):
+    assert values("vendor_id", words) == expected
+
+
+@pytest.mark.parametrize(
+    ("data", "twconfig3", "version"),
+    [
+        (b"1.0.0", ASCII_VERSION, "1.0.0"),
+        (b"V1.2  \x00junk", ASCII_VERSION, "V1.2"),
+        (b"ABCDEFGHIJKLMNOPQR", ASCII_VERSION, "ABCDEFGHIJKLMNOPQR"),
+        (b"", ASCII_VERSION, None),
+        (b"\x01\x02", ASCII_VERSION, None),
+        # Base-62 example of section 9.2.4: digits 1, 0/58, 0/2, 0/30.
+        (b"ba6acaE", 0, "1_58_2_30"),
+        (b"a999999", 0, "0_3843_3843_3843"),
+        (b"ba6aca", 0, None),
+        (b"ba6a-aE", 0, None),
+    ],
+)
+def test_version_number(values, data, twconfig3, version):
+    assert values("version_number", words_of(data, 6), twconfig3) == version
+
+
+def test_inventory_of_the_simulated_line(ucode, decode_all):
+    modem = Modem()
+    modem.line.showtime()
+    status = modem.line.status
+    raw = raw_words(modem, ["xdsl2LInvG994VendorId0", "xdsl2LInvG994VendorId1",
+                            "xdsl2LInvVersionNumber0", "xdsl2LInvVersionNumber1",
+                            "xdslTwConfig3"])
+
+    vendors = decode_all({k: raw[k] for k in ("xdsl2LInvG994VendorId0",
+                                              "xdsl2LInvG994VendorId1")})
+    assert vendors["xdsl2LInvG994VendorId0"]["raw"] == status.peer_vendor_id.hex()
+    assert vendors["xdsl2LInvG994VendorId1"]["provider"] == "META"
+
+    source = VALUES + """
+        printf('%J', [ v.version_number(RAW.xdsl2LInvVersionNumber0, RAW.xdslTwConfig3[0]),
+                       v.version_number(RAW.xdsl2LInvVersionNumber1, RAW.xdslTwConfig3[0]) ]);
+    """
+    assert ucode.run(source, RAW=raw) == [status.peer_version, status.own_version]
