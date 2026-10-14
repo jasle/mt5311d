@@ -1,24 +1,33 @@
 """Runs ucode code from tests and returns its result.
 
-Code under test prints exactly one JSON value (printf('%J', …)), which is parsed
-and returned. Binary data does not survive JSON; pass and return it hex-encoded
-(hexenc()/hexdec() in ucode).
+ucode runs in the OpenWrt test container (tests/container), which has the
+repository mounted read-only at CONTAINER_REPO. Code under test prints exactly
+one JSON value (printf('%J', …)), which is parsed and returned. Binary data does
+not survive JSON; pass and return it hex-encoded (hexenc()/hexdec() in ucode).
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
-from collections.abc import Sequence
-from pathlib import Path
+from collections.abc import Callable, Sequence
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 
+CONTAINER_REPO = PurePosixPath("/mt5311d")
+
+# Runs a command in the container: argv -> (exit code, stdout, stderr).
+Executor = Callable[[list[str]], tuple[int, str, str]]
+
 _MODULE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
+
+
+def container_path(path: Path | str) -> PurePosixPath:
+    """Path of a file of the repository inside the container."""
+    return CONTAINER_REPO / Path(path).resolve().relative_to(REPO).as_posix()
 
 
 class UcodeError(Exception):
@@ -31,12 +40,15 @@ class UcodeError(Exception):
 
 
 class Ucode:
-    """Runs the ucode interpreter with module search paths for the code under test."""
+    """Runs the ucode interpreter with module search paths for the code under test.
 
-    def __init__(self, binary: str = "ucode",
-                 search_paths: Sequence[Path | str] = (SRC / "*.uc",)) -> None:
-        self.binary = binary
-        self.search_paths = [str(p) for p in search_paths]
+    Search paths are given as paths of the repository and mapped into the container.
+    """
+
+    def __init__(self, execute: Executor,
+                 search_paths: Sequence[Path] = (SRC / "*.uc",)) -> None:
+        self.execute = execute
+        self.search_paths = [str(container_path(p.parent) / p.name) for p in search_paths]
 
     def run(self, source: str, **globals: Any) -> Any:
         """Runs source; keyword arguments become global variables (as JSON)."""
@@ -55,7 +67,7 @@ class Ucode:
                   f"printf('%J', m[{json.dumps(function)}](...ARGS));")
         return self.run(source, ARGS=list(args))
 
-    def compile(self, path: Path | str, *, module: bool = False) -> None:
+    def compile(self, path: Path, *, module: bool = False) -> None:
         """Checks a program, or a module with exports, for syntax errors.
 
         A program is compiled without running it. A module is imported, which
@@ -64,20 +76,18 @@ class Ucode:
 
         Raises UcodeError on syntax errors.
         """
+        target = str(container_path(path))
         if module:
-            path = Path(path).resolve()
-            self._exec(["-e", f"import * as m from {json.dumps(str(path))};"])
+            self._exec(["-e", f"import * as m from {json.dumps(target)};"])
         else:
-            self._exec(["-c", "-o", os.devnull, str(path)])
+            self._exec(["-c", "-o", "/dev/null", target])
 
     def _exec(self, args: list[str]) -> str:
-        cmd = [self.binary]
+        cmd = ["ucode"]
         for pattern in self.search_paths:
             cmd += ["-L", pattern]
-        # surrogateescape keeps bytes that are not valid UTF-8 visible in errors.
-        result = subprocess.run([*cmd, *args], capture_output=True, text=True,
-                                errors="surrogateescape", check=False)
-        if result.returncode != 0:
-            raise UcodeError(f"ucode exited with {result.returncode}:\n{result.stderr.strip()}",
-                             result.returncode, result.stderr)
-        return result.stdout
+        returncode, stdout, stderr = self.execute([*cmd, *args])
+        if returncode != 0:
+            raise UcodeError(f"ucode exited with {returncode}:\n{stderr.strip()}",
+                             returncode, stderr)
+        return stdout

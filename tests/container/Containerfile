@@ -1,0 +1,9 @@
+# OpenWrt userland for the tests of the ucode code: the same ucode, uloop and ubus
+# as on a router with OpenWrt 25.12.5.
+FROM docker.io/openwrt/rootfs:x86-64-v25.12.5
+
+RUN mkdir -p /var/lock /var/run \
+	&& apk update \
+	&& apk add ucode-mod-socket ucode-mod-struct ucode-mod-uloop ucode-mod-ubus \
+		ucode-mod-uci ip-full \
+	&& rm -rf /var/cache/apk/*

@@ -9,9 +9,7 @@ package-mode = false
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.1"
 mt5311sim = { path = "sim", develop = true }
+testcontainers = "^4.15.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = [
-    "netns: needs a network namespace with a veth pair",
-]

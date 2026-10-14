@@ -8,8 +8,8 @@ FIXTURES = Path(__file__).parent / "fixtures" / "ucode"
 
 
 @pytest.fixture
-def demo(ucode_binary) -> Ucode:
-    return Ucode(ucode_binary, search_paths=(FIXTURES / "*.uc",))
+def demo(execute) -> Ucode:
+    return Ucode(execute, search_paths=(FIXTURES / "*.uc",))
 
 
 @pytest.mark.parametrize(
@@ -65,16 +65,10 @@ def test_binary_data_as_hex(ucode):
     assert ucode.run("printf('%J', hexenc(hexdec(DATA) + '\\x01'));", DATA="00ff") == "00ff01"
 
 
-def test_compile(ucode, tmp_path):
-    program = tmp_path / "program.uc"
-    program.write_text("'use strict';\nprint(1);\n")
-    ucode.compile(program)
-
-    module = tmp_path / "module.uc"
-    module.write_text("'use strict';\nexport function f() { return 1; };\n")
-    ucode.compile(module, module=True)
-
-    bad = tmp_path / "bad.uc"
-    bad.write_text("let x = ;\n")
+def test_compile(ucode):
+    ucode.compile(FIXTURES / "syntax" / "program.uc")
+    ucode.compile(FIXTURES / "syntax" / "module.uc", module=True)
     with pytest.raises(UcodeError, match="Syntax error"):
-        ucode.compile(bad)
+        ucode.compile(FIXTURES / "syntax" / "broken.uc")
+    with pytest.raises(UcodeError, match="Syntax error"):
+        ucode.compile(FIXTURES / "syntax" / "broken.uc", module=True)

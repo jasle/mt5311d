@@ -12,16 +12,24 @@ development and tests is in [`sim/`](sim/README.md).
 
 ## Development
 
-The daemon is written in [ucode](https://github.com/jow-/ucode). Its tests run on the
-development machine with pytest, which executes the ucode code with the local ucode
-interpreter.
+The daemon is written in [ucode](https://github.com/jow-/ucode). Its tests run with
+pytest on the development machine; the ucode code itself runs in a container with the
+OpenWrt 25.12.5 userland ([`tests/container/Containerfile`](tests/container/Containerfile)),
+so it is tested with the same ucode, uloop and ubus as on a router. pytest manages the
+container with [testcontainers](https://testcontainers-python.readthedocs.io/) on
+rootless Podman.
 
-Requirements: ucode (set `UCODE` if it is not on the `PATH`), Python 3.11 or newer,
-[Poetry](https://python-poetry.org/) and [Task](https://taskfile.dev/).
+Requirements: Python 3.11 or newer, [Poetry](https://python-poetry.org/),
+[Task](https://taskfile.dev/) and rootless [Podman](https://podman.io/) with its API
+socket enabled once:
+
+```sh
+systemctl --user enable --now podman.socket
+```
 
 ```sh
 task install   # test dependencies and the simulator
-task test
+task test      # builds the test image on the first run
 task check     # syntax check of all ucode sources
 ```
 

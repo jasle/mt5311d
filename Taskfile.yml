@@ -7,14 +7,28 @@ tasks:
       - poetry install
 
   test:
-    desc: Run the tests of the ucode modules
+    desc: Run the tests of the ucode code in the OpenWrt test container
     cmds:
-      - poetry run pytest -m "not netns" {{.CLI_ARGS}}
+      - task: pytest
+        vars: { ARGS: '{{.CLI_ARGS}}' }
 
   check:
     desc: Check all ucode sources for syntax errors
     cmds:
-      - poetry run pytest tests/test_syntax.py {{.CLI_ARGS}}
+      - task: pytest
+        vars: { ARGS: 'tests/test_syntax.py {{.CLI_ARGS}}' }
+
+  pytest:
+    internal: true
+    # pytest runs in podman's user namespace, where it may enter the network
+    # namespace of the test container.
+    env:
+      DOCKER_HOST: unix://{{.XDG_RUNTIME_DIR}}/podman/podman.sock
+      TESTCONTAINERS_RYUK_DISABLED: 'true'
+    vars:
+      XDG_RUNTIME_DIR: { sh: 'echo "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"' }
+    cmds:
+      - podman unshare poetry run pytest {{.ARGS}}
 
   sim:install:
     desc: Install the simulator and its test dependencies
