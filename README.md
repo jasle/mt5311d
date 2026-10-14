@@ -22,6 +22,7 @@ Requirements: ucode (set `UCODE` if it is not on the `PATH`), Python 3.11 or new
 ```sh
 task install   # test dependencies and the simulator
 task test
+task check     # syntax check of all ucode sources
 ```
 
 ## License
