@@ -2,7 +2,7 @@
 
 ```
 Document:   MT5311-EBM-SPEC-RO
-Version:    1.6
+Version:    1.7
 Date:       2026-10-14
 Category:   Informational (unofficial)
 ```
@@ -622,8 +622,15 @@ maintained**; a host MUST NOT report them.
 An RT device updates the `Rt` table. Observed in showtime:
 `xdslMetanoiaRtCurrCorrectedBlocks0` counts downstream FEC corrections; after 56735 s
 of showtime it read 14868, while `xdslMetanoiaRtCurrCorrectedBlocks1` (upstream, as
-reported by the peer) read 3 and both `…CodingViolations0`/`1` read 0. A host on an RT
-device SHOULD therefore take the downstream CRC and FEC counts from
+reported by the peer) read 3 and both `…CodingViolations0`/`1` read 0. After 61316 s
+of the same showtime they read 16984, 4, 5 and 0, so `…CurrCodingViolations0` counts
+downstream CRC errors. The counters since start-up of the same device read
+`xdslMetanoiaRtCodingViolations0`/`1` = 7152/723, `…CorrectedBlocks0`/`1` =
+5747401/13174, and the seconds counters `xdslMetanoiaRtFecs0` = 8127, `…Es0` = 728,
+`…Ses0` = 368 and `…Uas0` = 11470, all larger than or consistent with the values of the
+current showtime. `xdslMetanoiaRtLoss0` read `FFFE9F`, which is no plausible count of
+seconds (about 194 days, or −353 as a signed value); its meaning is unknown and a host
+SHOULD NOT report it. A host on an RT device SHOULD therefore take the downstream CRC and FEC counts from
 `xdslMetanoiaRt[Curr]{CodingViolations,CorrectedBlocks}0` and the upstream counts from
 index `1` of the same table. The `Ot` table of an RT device also holds non-zero values
 that differ from the `Rt` table; their meaning is unknown and a host on an RT device
@@ -794,6 +801,13 @@ outside showtime and its behaviour after 2^24 s (about 194 days) are not known
 [UNVERIFIED]; a host SHOULD report it only while the line is in showtime and SHOULD treat
 a decrease without a loss of showtime as a wrap (7.2).
 
+#### 9.3.7. Visible Passbands
+
+`VisibleDsPb<i>{First,Last}Tone` (i = 0–3) and `VisibleUsPb<i>{First,Last}Tone`
+(i = 0–4) hold the first and last tone index of the passbands of each direction in
+use; unused passbands read `0` to `0`. Observed in showtime on a 17a line: downstream
+65–859, 1216–1961, 2793–3872; upstream 28–60, 871–1205, 1972–2782.
+
 ### 9.4. Retrain Reasons
 
 `xdsl2MetanoiaOtFailureReasons` (X:007F1C, valid on OT) /
@@ -867,12 +881,8 @@ Typical status set per poll cycle on an RT device:
 Upstream attenuation on an RT device: 9.1. Counter selection: 9.1. Value classes: 7.3.
 
 All values in this table have been read on an RT device in showtime with plausible
-results (9.1). Not confirmed are:
-
-- the counting of CRC errors: `xdslMetanoiaRtCurrCodingViolations0`/`1` read 0 in all
-  observations, so an increase has not been seen [UNVERIFIED];
-- the meaning of a delay and INP of 0 when retransmission is in use (9.1)
-  [UNVERIFIED].
+results (9.1). Not confirmed is the meaning of a delay and INP of 0 when
+retransmission is in use (9.1) [UNVERIFIED].
 
 ## 12. Security Considerations
 
@@ -935,24 +945,24 @@ All registers are in space X. Columns:
 | `nO_UsCombinationTpsTc` | `001779` | `001776` | 1 | E |  | (see 9.3.4) |
 | `xdsl2LineStatusActAtpUs2` | `006D1F` | = | 1 | – |  |  |
 | `xdsl2LineStatusActAtpDs2` | `006D20` | = | 1 | – |  |  |
-| `VisibleUsPb0FirstTone` | `006E37` | `006E4F` | 1 | – |  |  |
-| `VisibleUsPb0LastTone` | `006E38` | `006E50` | 1 | – |  |  |
-| `VisibleUsPb1FirstTone` | `006E39` | `006E51` | 1 | – |  |  |
-| `VisibleUsPb1LastTone` | `006E3A` | `006E52` | 1 | – |  |  |
-| `VisibleUsPb2FirstTone` | `006E3B` | `006E53` | 1 | – |  |  |
-| `VisibleUsPb2LastTone` | `006E3C` | `006E54` | 1 | – |  |  |
-| `VisibleUsPb3FirstTone` | `006E3D` | `006E55` | 1 | – |  |  |
-| `VisibleUsPb3LastTone` | `006E3E` | `006E56` | 1 | – |  |  |
-| `VisibleUsPb4FirstTone` | `006E3F` | `006E57` | 1 | – |  |  |
-| `VisibleUsPb4LastTone` | `006E40` | `006E58` | 1 | – |  |  |
-| `VisibleDsPb0FirstTone` | `006E47` | `006E5F` | 1 | – |  |  |
-| `VisibleDsPb0LastTone` | `006E48` | `006E60` | 1 | – |  |  |
-| `VisibleDsPb1FirstTone` | `006E49` | `006E61` | 1 | – |  |  |
-| `VisibleDsPb1LastTone` | `006E4A` | `006E62` | 1 | – |  |  |
-| `VisibleDsPb2FirstTone` | `006E4B` | `006E63` | 1 | – |  |  |
-| `VisibleDsPb2LastTone` | `006E4C` | `006E64` | 1 | – |  |  |
-| `VisibleDsPb3FirstTone` | `006E4D` | `006E65` | 1 | – |  |  |
-| `VisibleDsPb3LastTone` | `006E4E` | `006E66` | 1 | – |  |  |
+| `VisibleUsPb0FirstTone` | `006E37` | `006E4F` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb0LastTone` | `006E38` | `006E50` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb1FirstTone` | `006E39` | `006E51` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb1LastTone` | `006E3A` | `006E52` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb2FirstTone` | `006E3B` | `006E53` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb2LastTone` | `006E3C` | `006E54` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb3FirstTone` | `006E3D` | `006E55` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb3LastTone` | `006E3E` | `006E56` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb4FirstTone` | `006E3F` | `006E57` | 1 | – |  | (see 9.3.7) |
+| `VisibleUsPb4LastTone` | `006E40` | `006E58` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb0FirstTone` | `006E47` | `006E5F` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb0LastTone` | `006E48` | `006E60` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb1FirstTone` | `006E49` | `006E61` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb1LastTone` | `006E4A` | `006E62` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb2FirstTone` | `006E4B` | `006E63` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb2LastTone` | `006E4C` | `006E64` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb3FirstTone` | `006E4D` | `006E65` | 1 | – |  | (see 9.3.7) |
+| `VisibleDsPb3LastTone` | `006E4E` | `006E66` | 1 | – |  | (see 9.3.7) |
 | `xdsl2LineStatusXtuTransSys` | `006F19` | `006F2E` | 1 | E | Xdsl2TransmissionModeType | (see 9.3.2) |
 | `xdsl2LineStatusPwrMngState` | `006F1A` | `006F2F` | 1 | E | Xdsl2PowerMngState | Line power management state (see 9.3.5) |
 | `xdsl2LineStatusInitResult` | `006F1B` | `006F30` | 1 | E | Xdsl2InitResult | (see 9.3.5) |
@@ -1186,7 +1196,7 @@ All registers are in space X. Columns:
 | `xdslMetanoiaRtFecs0` | `007F1F` | `007F34` | 1 | C |  | (see 9.1) |
 | `xdslMetanoiaRtEs0` | `007F20` | `007F35` | 1 | C |  | (see 9.1) |
 | `xdslMetanoiaRtSes0` | `007F21` | `007F36` | 1 | C |  | (see 9.1) |
-| `xdslMetanoiaRtLoss0` | `007F22` | `007F37` | 1 | C |  | (see 9.1) |
+| `xdslMetanoiaRtLoss0` | `007F22` | `007F37` | 1 | C |  | Meaning unknown, see 9.1 |
 | `xdslMetanoiaRtUas0` | `007F23` | `007F38` | 1 | C |  | (see 9.1) |
 | `xdslMetanoiaRtCurrCorrectedBlocks0` | `007F27` | `007F3C` | 1 | C |  | (see 9.1) |
 | `xdslMetanoiaRtCurrCodingViolations0` | `007F28` | `007F3D` | 1 | C |  | (see 9.1) |
@@ -1502,9 +1512,8 @@ D→H  0009 81 00000005 00  000001                upstream(1): branch 1.60 layou
 11. Atomicity of multi-command READ requests (5.5).
 12. `xdslMetanoiaShowtimeSeconds` outside showtime and after overflow (9.3.6).
 13. Retrain reason value `0` (9.4).
-14. Counting of CRC errors in `xdslMetanoiaRtCurrCodingViolations0`/`1` (9.1, 11).
-15. `xdsl2ChStatusActDelay`/`ActInp` when retransmission (G.INP) is in use (9.1).
-16. The base-62 format of the inventory version number (9.2.4); only the ASCII format has
+14. `xdsl2ChStatusActDelay`/`ActInp` when retransmission (G.INP) is in use (9.1).
+15. The base-62 format of the inventory version number (9.2.4); only the ASCII format has
     been observed.
 
 **Open issues:**
@@ -1535,3 +1544,4 @@ D→H  0009 81 00000005 00  000001                upstream(1): branch 1.60 layou
     the `xdsl2SCStatusSegment*` buffers and segment selection.
 11. Further message types (e.g. for memory dumps or file transfer) may exist; they are
     not covered by this document.
+12. Meaning of `xdslMetanoiaRtLoss0`, which read `FFFE9F` on a device (9.1).
