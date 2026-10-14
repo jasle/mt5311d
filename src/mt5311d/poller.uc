@@ -1,0 +1,292 @@
+// Poller: keeps the state of the modem up to date over a session
+// (MT5311_EBM_Monitoring_Spec.md, sections 6.4, 7.2, 8.2, 9 and 11).
+//
+// A poll cycle connects if needed, identifies the firmware and selects the
+// address layout, then reads the identification block followed by all registers
+// of the register table. Measurement values are only reported in showtime; the
+// 24-bit counters are extended to counters without overflow since the start of
+// the showtime.
+
+'use strict';
+
+import * as layout from 'mt5311d.layout';
+import * as registers from 'mt5311d.registers';
+import * as protocol from 'mt5311d.protocol';
+import * as values from 'mt5311d.values';
+
+const DEFAULTS = {
+	reconnect_delay: 1000,	// ms after a failed connection attempt (6.4)
+};
+
+// Registers that need more than their own words to be decoded (9.2.4).
+const VERSION_NUMBERS = [ 'xdsl2LInvVersionNumber0', 'xdsl2LInvVersionNumber1' ];
+
+const SHOWTIME_SECONDS = 'xdslMetanoiaShowtimeSeconds';
+const FAILURE_REASON = 'xdsl2MetanoiaRtFailureReasons';
+
+function now_ms() {
+	const t = clock(true);
+
+	return t[0] * 1000 + t[1] / 1000000;
+}
+
+function same_identity(a, b) {
+	return a.version == b.version && a.date == b.date && a.time == b.time &&
+	       a.signature == b.signature;
+}
+
+// Creates a poller for an open session. options: { reconnect_delay? }
+export function create(session, options) {
+	const config = { ...DEFAULTS, ...options };
+
+	let connected = false;
+	let last_attempt = null;	// end of the last failed connection attempt, ms
+	let id = null;			// identification block at layout selection
+	let terminal = null;		// xdslTerminal decoded at layout selection
+	let selected = null;		// result of layout.select()
+	let plan = null;		// [ { name, addresses } ] for the selected layout
+	let previous = null;		// { showtime, raw } of the previous cycle
+	let counters = {};
+	let busy = false;
+	let state = { status: 'connecting', reason: null, updated: null };
+
+	function update(fields) {
+		state = { ...fields, updated: now_ms() };
+	}
+
+	// Forgets everything that belongs to the session (6.4).
+	function lose_session(reason) {
+		connected = false;
+		id = terminal = selected = plan = previous = null;
+		counters = {};
+		update({ status: 'error', reason });
+	}
+
+	// Reads any number of addresses in requests of up to MAX_COMMANDS.
+	// done({ status: 'ok', words }) or done(failure of the first failing request).
+	function read_all(addresses, done, words) {
+		words ??= [];
+
+		if (length(words) == length(addresses))
+			return done({ status: 'ok', words });
+
+		const chunk = slice(addresses, length(words), length(words) + protocol.MAX_COMMANDS);
+
+		session.read(chunk, (result) => {
+			if (result.status != 'ok')
+				return done(result);
+
+			read_all(addresses, done, [ ...words, ...result.words ]);
+		});
+	}
+
+	function connect(done) {
+		if (connected)
+			return done(true);
+
+		if (last_attempt != null && now_ms() - last_attempt < config.reconnect_delay) {
+			update({ status: 'error', reason: 'waiting to reconnect' });
+			return done(false);
+		}
+
+		session.connect((ok, reason) => {
+			connected = ok;
+			last_attempt = ok ? null : now_ms();
+
+			if (!ok)
+				update({ status: 'error', reason });
+
+			done(ok);
+		});
+	}
+
+	function make_plan(layout_name) {
+		const entries = [];
+
+		for (let name in registers.names()) {
+			const base = registers.address(layout_name, name);
+			const addresses = [];
+
+			for (let i = 0; i < registers.words(name); i++)
+				push(addresses, base + i);
+
+			push(entries, { name, addresses });
+		}
+
+		return entries;
+	}
+
+	function identification() {
+		return {
+			firmware: values.firmware(id),
+			board_type: id.board_type,
+			terminal,
+			layout: selected.layout,
+		};
+	}
+
+	function report_unsupported() {
+		const reason = (terminal.role != 'RT')
+			? 'device runs as OT (network side); only RT is supported'
+			: `firmware not supported: ${selected.reason}`;
+
+		update({ status: 'unsupported', reason, ...identification() });
+	}
+
+	// Reads the identification block and the layout check (8.2). done(supported).
+	function identify(done) {
+		if (selected != null)
+			return done(true);
+
+		const check = layout.check_addresses();
+
+		read_all([ ...layout.ID_ADDRESSES, ...check ], (result) => {
+			if (result.status != 'ok') {
+				lose_session(`identification failed: ${result.status}`);
+				return done(false);
+			}
+
+			id = layout.parse_id(slice(result.words, 0, length(layout.ID_ADDRESSES)));
+			terminal = values.terminal(id.terminal);
+			selected = layout.select(id, slice(result.words, length(layout.ID_ADDRESSES)));
+
+			if (selected.layout == null || terminal.role != 'RT') {
+				report_unsupported();
+				selected = null;	// check again in the next cycle
+				return done(false);
+			}
+
+			plan = make_plan(selected.layout);
+			done(true);
+		});
+	}
+
+	// Extends the 24-bit counters (7.2). A counter starts again from its raw value
+	// at a new showtime: when the line was not in showtime in the previous cycle,
+	// or when the showtime duration decreased because a whole retrain fell
+	// between two cycles.
+	function extend_counters(raw, showtime) {
+		const reset = previous == null || !previous.showtime || !showtime ||
+			raw[SHOWTIME_SECONDS][0] < previous.raw[SHOWTIME_SECONDS][0];
+
+		const extended = {};
+
+		for (let entry in plan) {
+			const name = entry.name;
+
+			if (values.format(name).class != 'C')
+				continue;
+
+			extended[name] = reset
+				? raw[name][0]
+				: counters[name] + values.counter_delta(previous.raw[name][0], raw[name][0]);
+		}
+
+		counters = extended;
+	}
+
+	function evaluate(raw) {
+		const line = values.terminal(raw.xdslTerminal[0]);
+		const showtime = line.showtime;
+		const decoded = {};
+
+		for (let entry in plan) {
+			const name = entry.name;
+			const fmt = values.format(name);
+
+			if (name in VERSION_NUMBERS)
+				decoded[name] = values.version_number(raw[name], raw.xdslTwConfig3[0]);
+			else if (fmt.class == 'M' && !showtime)
+				decoded[name] = null;	// only meaningful in showtime (7.3)
+			else
+				decoded[name] = values.decode(name, raw[name]);
+		}
+
+		extend_counters(raw, showtime);
+		previous = { showtime, raw };
+
+		update({
+			status: 'ok',
+			reason: null,
+			...identification(),
+			terminal: line,
+			showtime,
+			values: decoded,
+			counters: showtime ? counters : {},	// counters of the current showtime
+			failure_reason: decoded[FAILURE_REASON],
+		});
+	}
+
+	// Reads the identification block and all registers of the plan (11).
+	function poll(done) {
+		const addresses = [ ...layout.ID_ADDRESSES ];
+
+		for (let entry in plan)
+			push(addresses, ...entry.addresses);
+
+		read_all(addresses, (result) => {
+			if (result.status != 'ok') {
+				lose_session(`read failed: ${result.status}`);
+				return done(false);
+			}
+
+			const current = layout.parse_id(slice(result.words, 0, length(layout.ID_ADDRESSES)));
+
+			// A changed identification means another firmware or a reset device;
+			// it needs a new session and a new layout selection (6.4).
+			if (!current.valid || !same_identity(current, id)) {
+				lose_session('identification changed');
+				return done(false);
+			}
+
+			const raw = {};
+			let offset = length(layout.ID_ADDRESSES);
+
+			for (let entry in plan) {
+				raw[entry.name] = slice(result.words, offset, offset + length(entry.addresses));
+				offset += length(entry.addresses);
+			}
+
+			evaluate(raw);
+			done(true);
+		});
+	}
+
+	// One poll cycle. A session error in the middle of a cycle is followed by
+	// one new attempt within the same cycle (6.4).
+	function cycle(done, retry) {
+		connect((ok) => {
+			if (!ok)
+				return done();
+
+			identify((supported) => {
+				if (!connected)
+					return retry ? cycle(done, false) : done();
+
+				if (!supported)
+					return done();
+
+				poll((ok) => (!ok && retry) ? cycle(done, false) : done());
+			});
+		});
+	}
+
+	return {
+		// Runs a poll cycle and passes the new state to callback.
+		refresh: function(callback) {
+			if (busy)
+				die('a poll cycle is already running');
+
+			busy = true;
+			cycle(() => {
+				busy = false;
+				callback(state);
+			}, true);
+		},
+
+		// The state of the last cycle.
+		state: function() {
+			return state;
+		},
+	};
+};
