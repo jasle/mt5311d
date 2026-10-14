@@ -145,7 +145,10 @@ def test_outside_showtime(run_poller, simulator):
     # Measurement values are only meaningful in showtime (7.3), rates included.
     assert state["values"]["xdsl2ChStatusActDataRate2"] is None
     assert state["values"]["xdsl2LineStatusActAtpDs"] is None
-    assert state["counters"] == {}
+    # Only the counters since start-up; showtime counters belong to a showtime.
+    assert "xdslMetanoiaRtCodingViolations0" in state["counters"]
+    assert not [name for name in state["counters"]
+                if "Curr" in name or name == "xdslMetanoiaShowtimeSeconds"]
 
 
 def test_retrain(run_poller, simulator, on_cycle):
@@ -175,6 +178,39 @@ def test_counters_are_extended_beyond_24_bits(run_poller, simulator, on_cycle):
     ]
     # The modem's own counter wrapped.
     assert states[1]["values"]["xdslMetanoiaRtCurrCorrectedBlocks0"] == 0x10
+
+
+def test_counters_since_start_up_continue_across_a_retrain(run_poller, simulator, on_cycle):
+    line = simulator.modem.line
+    line.showtime()
+    line.tick(60)
+    line.add_errors("ds", crc=0xFFFFF0, fec=10)
+
+    def retrain():
+        line.retrain(FailureReason.CRC_ERRORS)
+        line.showtime()
+        line.tick(5)  # the showtime duration decreases, so the retrain is detected
+        line.add_errors("ds", crc=0x20, fec=5)
+
+    on_cycle(2, retrain)
+    states = run_poller(REFRESH, REFRESH)
+    totals = [(s["counters"]["xdslMetanoiaRtCodingViolations0"],
+               s["counters"]["xdslMetanoiaRtCorrectedBlocks0"]) for s in states]
+    current = [s["counters"]["xdslMetanoiaRtCurrCorrectedBlocks0"] for s in states]
+    # Across the retrain and the overflow of the modem's 24-bit counter.
+    assert totals == [(0xFFFFF0, 10), (0x1000010, 15)]
+    assert current == [10, 5]
+
+
+def test_seconds_counters_since_start_up(run_poller, simulator):
+    line = simulator.modem.line
+    line.tick(3)
+    line.showtime()
+    line.error_rates["ds"].crc = 1
+    line.tick(4)
+    (state,) = run_poller(REFRESH)
+    counters = state["counters"]
+    assert (counters["xdslMetanoiaRtEs0"], counters["xdslMetanoiaRtUas0"]) == (4, 3)
 
 
 def test_whole_retrain_between_two_cycles(run_poller, simulator, on_cycle):

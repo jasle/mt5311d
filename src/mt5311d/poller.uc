@@ -6,9 +6,8 @@
 // of the register table. A register that cannot be read is skipped instead of
 // ending the session (6.4). Cycles run on demand (refresh) and, once started, in
 // the background at a fixed interval, so that counter overflows and retrains are
-// seen even when nobody asks. Measurement values are only reported in showtime; the
-// 24-bit counters are extended to counters without overflow since the start of
-// the showtime.
+// seen even when nobody asks. Measurement values are only reported in showtime;
+// the 24-bit counters are extended to counters without overflow.
 
 'use strict';
 
@@ -36,6 +35,12 @@ function now_ms() {
 	const t = clock(true);
 
 	return t[0] * 1000 + t[1] / 1000000;
+}
+
+// Counters of the current showtime (9.1, 9.3.6); the other counters of class C
+// count since the start-up of the modem.
+function is_showtime_counter(name) {
+	return name == SHOWTIME_SECONDS || index(name, 'Curr') >= 0;
 }
 
 function same_identity(a, b) {
@@ -178,14 +183,16 @@ export function create(session, options) {
 		});
 	}
 
-	// Extends the 24-bit counters (7.2). A counter starts again from its raw value
-	// at a new showtime: when the line was not in showtime in the previous cycle,
-	// or when the showtime duration decreased because a whole retrain fell
-	// between two cycles.
+	// Extends the 24-bit counters across overflows (7.2). A showtime counter
+	// starts again from its raw value at a new showtime: when the line was not in
+	// showtime in the previous cycle, or when the showtime duration decreased
+	// because a whole retrain fell between two cycles. Counters since start-up
+	// continue across retrains; they start again only with a new session, as a
+	// restart of the modem cannot be told apart from an overflow otherwise.
 	function extend_counters(raw, showtime) {
 		const seconds = raw[SHOWTIME_SECONDS]?.[0];
 		const previous_seconds = previous?.raw[SHOWTIME_SECONDS]?.[0];
-		const reset = previous == null || !previous.showtime || !showtime ||
+		const new_showtime = previous == null || !previous.showtime || !showtime ||
 			(seconds != null && previous_seconds != null && seconds < previous_seconds);
 
 		const extended = {};
@@ -196,12 +203,26 @@ export function create(session, options) {
 			if (values.format(name).class != 'C' || raw[name] == null)
 				continue;
 
-			extended[name] = (reset || counters[name] == null || previous.raw[name] == null)
+			const restart = previous == null || counters[name] == null ||
+				previous.raw[name] == null || (new_showtime && is_showtime_counter(name));
+
+			extended[name] = restart
 				? raw[name][0]
 				: counters[name] + values.counter_delta(previous.raw[name][0], raw[name][0]);
 		}
 
 		counters = extended;
+	}
+
+	// Counters to report: showtime counters only in showtime.
+	function reported_counters(showtime) {
+		const reported = {};
+
+		for (let name, value in counters)
+			if (showtime || !is_showtime_counter(name))
+				reported[name] = value;
+
+		return reported;
 	}
 
 	function evaluate(raw) {
@@ -234,7 +255,7 @@ export function create(session, options) {
 			terminal: line,
 			showtime,
 			values: decoded,
-			counters: showtime ? counters : {},	// counters of the current showtime
+			counters: reported_counters(showtime),
 			failure_reason: decoded[FAILURE_REASON],
 			unreadable: sort(keys(unreadable)),
 			suspended: sort(keys(suspended)),

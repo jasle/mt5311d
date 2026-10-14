@@ -60,6 +60,26 @@ const REGISTERS = {
 	xdsl2LineBandStatusSnrMargin10:      [ 0x007002, 0x007017, 1 ],
 	xdsl2MetanoiaRtFailureReasons:       [ 0x007f59, 0x007f6e, 1 ],
 
+	// Visible passbands (A.2), tone indices
+	VisibleUsPb0FirstTone:               [ 0x006e37, 0x006e4f, 1 ],
+	VisibleUsPb0LastTone:                [ 0x006e38, 0x006e50, 1 ],
+	VisibleUsPb1FirstTone:               [ 0x006e39, 0x006e51, 1 ],
+	VisibleUsPb1LastTone:                [ 0x006e3a, 0x006e52, 1 ],
+	VisibleUsPb2FirstTone:               [ 0x006e3b, 0x006e53, 1 ],
+	VisibleUsPb2LastTone:                [ 0x006e3c, 0x006e54, 1 ],
+	VisibleUsPb3FirstTone:               [ 0x006e3d, 0x006e55, 1 ],
+	VisibleUsPb3LastTone:                [ 0x006e3e, 0x006e56, 1 ],
+	VisibleUsPb4FirstTone:               [ 0x006e3f, 0x006e57, 1 ],
+	VisibleUsPb4LastTone:                [ 0x006e40, 0x006e58, 1 ],
+	VisibleDsPb0FirstTone:               [ 0x006e47, 0x006e5f, 1 ],
+	VisibleDsPb0LastTone:                [ 0x006e48, 0x006e60, 1 ],
+	VisibleDsPb1FirstTone:               [ 0x006e49, 0x006e61, 1 ],
+	VisibleDsPb1LastTone:                [ 0x006e4a, 0x006e62, 1 ],
+	VisibleDsPb2FirstTone:               [ 0x006e4b, 0x006e63, 1 ],
+	VisibleDsPb2LastTone:                [ 0x006e4c, 0x006e64, 1 ],
+	VisibleDsPb3FirstTone:               [ 0x006e4d, 0x006e65, 1 ],
+	VisibleDsPb3LastTone:                [ 0x006e4e, 0x006e66, 1 ],
+
 	// Channel status (A.3)
 	xdsl2ChStatusActDataRate0:           [ 0x007004, 0x007019, 1 ],
 	xdsl2ChStatusActDelay0:              [ 0x007006, 0x00701b, 1 ],
@@ -74,7 +94,16 @@ const REGISTERS = {
 	xdsl2LInvG994VendorId1:              [ 0x0079e4, 0x0079f9, 3 ],
 	xdsl2LInvVersionNumber1:             [ 0x0079ea, 0x0079ff, 6 ],
 
-	// Counters of the xTU-R (A.5, 9.1)
+	// Counters of the xTU-R (A.5, 9.1): since start-up, and in the current showtime
+	xdslMetanoiaRtCorrectedBlocks0:      [ 0x007f1d, 0x007f32, 1 ],
+	xdslMetanoiaRtCodingViolations0:     [ 0x007f1e, 0x007f33, 1 ],
+	xdslMetanoiaRtFecs0:                 [ 0x007f1f, 0x007f34, 1 ],
+	xdslMetanoiaRtEs0:                   [ 0x007f20, 0x007f35, 1 ],
+	xdslMetanoiaRtSes0:                  [ 0x007f21, 0x007f36, 1 ],
+	xdslMetanoiaRtLoss0:                 [ 0x007f22, 0x007f37, 1 ],
+	xdslMetanoiaRtUas0:                  [ 0x007f23, 0x007f38, 1 ],
+	xdslMetanoiaRtCorrectedBlocks1:      [ 0x007f3b, 0x007f50, 1 ],
+	xdslMetanoiaRtCodingViolations1:     [ 0x007f3c, 0x007f51, 1 ],
 	xdslMetanoiaShowtimeSeconds:         [ 0x006d35, 0x006d35, 1 ],
 	xdslMetanoiaRtCurrCodingViolations0: [ 0x007f28, 0x007f3d, 1 ],
 	xdslMetanoiaRtCurrCorrectedBlocks0:  [ 0x007f27, 0x007f3c, 1 ],
