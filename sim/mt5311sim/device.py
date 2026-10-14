@@ -125,6 +125,8 @@ class Device:
                 self.poke(base + i, word)
 
     def _address(self, reg: Register) -> int:
+        if reg.addr_160 == reg.addr_161:
+            return reg.addr_160
         if self.layout is None:
             raise LookupError(f"{reg.name}: firmware has no known address layout")
         return reg.address(self.layout)
@@ -146,9 +148,8 @@ class Device:
                 "xdslTerminal": terminal_word(self.role, LineState.IDLE),
                 "xdslMetanoiaSignature": words.octets(SIGNATURE, 1)[0],
             }
-            # The identification block has the same addresses in all layouts.
             for name, word in id_block.items():
-                self.poke(register(name).addr_160, word)
+                self.set(name, word)
 
             if firmware.layout is not None:
                 for i, band in enumerate(LINE_BANDS):
