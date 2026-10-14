@@ -136,13 +136,16 @@ def test_decode_by_class(decode_all):
         "xdsl2LineStatusActAtpUs": [0xFFFFE3],
         "xdsl2LineBandStatusSigAtten10": [0x7FFFFE],
         "xdslMetanoiaRtCurrCodingViolations0": [0x7FFFFF],
+        "ModemStatus": [0x00000F],
         "xdslTerminal": [0x000329],
     }) == {
         "xdsl2LineBandStatusSnrMargin10": 3.3,
         "xdsl2LineStatusActAtpUs": -2.9,
         "xdsl2LineBandStatusSigAtten10": None,
         "xdslMetanoiaRtCurrCodingViolations0": 0x7FFFFF,
-        "xdslTerminal": 0x000329,
+        "ModemStatus": 0x00000F,
+        "xdslTerminal": {"role": "RT", "chip": "AURORA", "line_state": "showtime",
+                         "showtime": True},
     }
 
 
@@ -202,4 +205,133 @@ def test_counters_of_the_simulated_line(decode_all):
         "xdslMetanoiaRtCurrCodingViolations0": 3,
         "xdslMetanoiaRtCurrCorrectedBlocks0": 7,
         "xdslMetanoiaShowtimeSeconds": 42,
+    }
+
+
+# Identification and enumerations (9.2 to 9.4)
+
+
+def test_firmware_750202(values):
+    assert values("firmware", {"version": 0x750202, "date": 0x090718, "time": 0x173044}) == {
+        "version": 0x750202, "major": 0x75, "minor": 0x0202,
+        "date": "2018-09-07", "time": "17:30:44",
+    }
+
+
+def test_firmware_with_invalid_bcd(values):
+    result = values("firmware", {"version": 0, "date": 0x0907A8, "time": 0xFFFFFF})
+    assert (result["date"], result["time"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("word", "expected"),
+    [
+        # Examples observed in section 9.2.1.
+        (0x000029, {"role": "RT", "chip": "AURORA", "line_state": "idle", "showtime": False}),
+        (0x000329, {"role": "RT", "chip": "AURORA", "line_state": "showtime", "showtime": True}),
+        (0x000128, {"role": "OT", "chip": "AURORA", "line_state": "handshake", "showtime": False}),
+        (0x000221, {"role": "RT", "chip": "ARGO", "line_state": "training", "showtime": False}),
+        (0x000049, {"role": "RT", "chip": "BARTON", "line_state": "idle", "showtime": False}),
+        (0x000041, {"role": "RT", "chip": "BORA", "line_state": "idle", "showtime": False}),
+    ],
+)
+def test_terminal(values, word, expected):
+    assert values("terminal", word) == expected
+
+
+@pytest.mark.parametrize(
+    ("word", "name"),
+    [(0, "none"), (1, "loss_of_signal"), (2, "loss_of_power"), (3, "crc_errors"),
+     (4, "training_failure"), (5, "disconnect"), (6, "snr_below_minimum"), (7, None)],
+)
+def test_failure_reason(values, word, name):
+    assert values("failure_reason", word) == {"value": word, "name": name}
+
+
+@pytest.mark.parametrize(
+    ("word", "name", "standard", "annex", "family"),
+    [
+        # Values used by this device class (9.3.2); names from RFC 5650.
+        (18, "g9923PotsNonOverlapped", "G.992.3", "A", "ADSL2"),
+        (20, "g9923IsdnNonOverlapped", "G.992.3", "B", "ADSL2"),
+        (40, "g9925PotsNonOverlapped", "G.992.5", "A", "ADSL2+"),
+        (42, "g9925IsdnNonOverlapped", "G.992.5", "B", "ADSL2+"),
+        (56, "g9932AnnexA", "G.993.2", "A", "VDSL2"),
+        (57, "g9932AnnexB", "G.993.2", "B", "VDSL2"),
+        # Other bits of the full list.
+        (0, "ansit1413", "ANSI T1.413", None, "ADSL"),
+        (6, "g9921tcmIsdnNonOverlapped", "G.992.1", "C", "ADSL"),
+        (30, "g9923AnnexJAllDigNonOverlapped", "G.992.3", "J", "ADSL2"),
+        (58, "g9932AnnexC", "G.993.2", "C", "VDSL2"),
+        (13, None, None, None, None),
+        (64, None, None, None, None),
+    ],
+)
+def test_trans_sys(values, word, name, standard, annex, family):
+    assert values("trans_sys", word) == {"value": word, "name": name, "standard": standard,
+                                         "annex": annex, "family": family}
+
+
+@pytest.mark.parametrize(
+    ("word", "name"),
+    [(0x01, "8a"), (0x02, "8b"), (0x04, "8c"), (0x08, "8d"), (0x10, "12a"), (0x20, "12b"),
+     (0x40, "17a"), (0x80, "30a"), (0x00, None), (0x41, None), (0x100, None)],
+)
+def test_profile(values, word, name):
+    assert values("profile", word) == {"value": word, "name": name}
+
+
+@pytest.mark.parametrize(
+    ("word", "name"), [(0x20, "PTM"), (0x40, "ATM"), (0x80, "STM"), (0x00, None)],
+)
+def test_tps_tc(values, word, name):
+    assert values("tps_tc", word) == {"value": word, "name": name}
+
+
+@pytest.mark.parametrize(("word", "value"), [(1, True), (2, False), (0, None), (3, None)])
+def test_truth(values, word, value):
+    assert values("truth", word) is value
+
+
+@pytest.mark.parametrize(("word", "name"), [(1, "disabled"), (2, "enabled"), (0, None)])
+def test_snr_mode(values, word, name):
+    assert values("snr_mode", word) == {"value": word, "name": name}
+
+
+@pytest.mark.parametrize(
+    ("word", "name"),
+    [(0, "noFail"), (1, "configError"), (2, "configNotFeasible"), (3, "commFail"),
+     (4, "noPeerAtu"), (5, "otherCause"), (6, None)],
+)
+def test_init_result(values, word, name):
+    assert values("init_result", word) == {"value": word, "name": name}
+
+
+def test_enumerations_of_the_simulated_line(decode_all):
+    modem = Modem()
+    modem.line.status.upstream.trellis = False
+    modem.line.status.downstream.virtual_noise = True
+    modem.line.showtime()
+    result = decode_all(raw_words(modem, [
+        "xdslTerminal", "xdsl2LineStatusXtuTransSys", "xdsl2LineStatusActProfile",
+        "nO_DsCombinationTpsTc", "xdsl2LineStatusTrellisDs", "xdsl2LineStatusTrellisUs",
+        "xdsl2LineStatusActSnrModeDs", "xdsl2LineStatusActSnrModeUs",
+        "xdsl2LineStatusInitResult",
+    ]))
+    assert result["xdslTerminal"]["line_state"] == "showtime"
+    assert result["xdsl2LineStatusXtuTransSys"]["name"] == "g9932AnnexB"
+    assert result["xdsl2LineStatusActProfile"]["name"] == modem.line.status.profile
+    assert result["nO_DsCombinationTpsTc"]["name"] == "PTM"
+    assert (result["xdsl2LineStatusTrellisDs"], result["xdsl2LineStatusTrellisUs"]) == (True, False)
+    assert result["xdsl2LineStatusActSnrModeDs"]["name"] == "enabled"
+    assert result["xdsl2LineStatusActSnrModeUs"]["name"] == "disabled"
+    assert result["xdsl2LineStatusInitResult"]["name"] == "noFail"
+
+
+def test_failure_reason_of_the_simulated_line(decode_all):
+    modem = Modem()
+    modem.line.showtime()
+    modem.line.retrain(FailureReason.CRC_ERRORS)
+    assert decode_all(raw_words(modem, ["xdsl2MetanoiaRtFailureReasons"])) == {
+        "xdsl2MetanoiaRtFailureReasons": {"value": 3, "name": "crc_errors"},
     }
