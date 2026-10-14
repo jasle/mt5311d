@@ -5,10 +5,10 @@ expose them on ubus.
 
 ## Status
 
-The daemon is not implemented yet. The repository currently contains the protocol
-specification it will be based on:
-[`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md), and a modem
-simulator for development and tests in [`sim/`](sim/README.md).
+The daemon is being implemented; its ucode modules are in [`src/`](src/). It is based
+on the protocol specification
+[`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md). A modem simulator for
+development and tests is in [`sim/`](sim/README.md).
 
 ## Development
 
