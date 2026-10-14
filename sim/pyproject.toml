@@ -3,7 +3,7 @@ name = "mt5311sim"
 version = "0.1.0"
 description = "Simulator for the EBM monitoring protocol of Metanoia MT5311 VDSL2 SFP modems"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]

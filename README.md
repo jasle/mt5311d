@@ -19,7 +19,7 @@ so it is tested with the same ucode, uloop and ubus as on a router. pytest manag
 container with [testcontainers](https://testcontainers-python.readthedocs.io/) on
 rootless Podman.
 
-Requirements: Python 3.11 or newer, [Poetry](https://python-poetry.org/),
+Requirements: Python 3.12 or newer, [Poetry](https://python-poetry.org/),
 [Task](https://taskfile.dev/) and rootless [Podman](https://podman.io/) with its API
 socket enabled once:
 

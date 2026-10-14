@@ -1,5 +1,7 @@
+import os
 import select
 import socket
+import subprocess
 import time
 
 import pytest
@@ -120,3 +122,35 @@ def test_line_changes_are_visible(client, modem):
     modem.line.showtime()
     message = roundtrip(client, Read(1, (ReadCommand(Space.X, 0x006C35),)))
     assert decode_response(message).words == (0x000329,)
+
+
+@pytest.fixture
+def foreign_netns(veth):
+    """A second network namespace holding the modem side of another veth pair."""
+    holder = subprocess.Popen(["unshare", "--net", "sleep", "60"])
+    netns = f"/proc/{holder.pid}/ns/net"
+    # Wait until the child has entered its namespace.
+    deadline = time.monotonic() + 5
+    while os.readlink(netns) == os.readlink("/proc/self/ns/net"):
+        assert time.monotonic() < deadline, "namespace not created"
+        time.sleep(0.01)
+
+    subprocess.run(["ip", "link", "add", "name", "ns-host", "type", "veth",
+                    "peer", "name", "ns-modem"], check=True)
+    subprocess.run(["ip", "link", "set", "dev", "ns-modem", "netns", str(holder.pid)],
+                   check=True)
+    subprocess.run(["nsenter", f"--net={netns}", "ip", "link", "set", "dev", "ns-modem", "up"],
+                   check=True)
+    subprocess.run(["ip", "link", "set", "dev", "ns-host", "up"], check=True)
+    yield netns
+    holder.kill()
+    holder.wait()  # the namespace and its end of the veth pair go away with it
+
+
+def test_transport_in_another_network_namespace(foreign_netns, modem):
+    with Transport(modem, "ns-modem", netns=foreign_netns) as transport:
+        client = Client("ns-host", transport.mac)
+        try:
+            connect(client)
+        finally:
+            client.close()

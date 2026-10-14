@@ -12,7 +12,7 @@ specification. Faults such as lost, late or error responses can be injected.
 
 ## Setup
 
-Needs Python 3.11 or newer and [Poetry](https://python-poetry.org/).
+Needs Python 3.12 or newer and [Poetry](https://python-poetry.org/).
 
 ```sh
 task sim:install

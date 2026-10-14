@@ -262,7 +262,7 @@ name = "mt5311sim"
 version = "0.1.0"
 description = "Simulator for the EBM monitoring protocol of Metanoia MT5311 VDSL2 SFP modems"
 optional = false
-python-versions = ">=3.11"
+python-versions = ">=3.12"
 groups = ["dev"]
 files = []
 develop = true
@@ -607,5 +607,5 @@ dev = ["pytest", "setuptools"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.11"
-content-hash = "c9d4676a93b41352bf9903090fe5b77d82872e14c64a263170d7cb99949d9962"
+python-versions = ">=3.12"
+content-hash = "5fed63472ad3e0bb09f20f94607054ccd0a9fd161e20db50ff172e0a4f30d51f"

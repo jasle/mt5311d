@@ -5,6 +5,7 @@ from __future__ import annotations
 import heapq
 import itertools
 import logging
+import os
 import select
 import socket
 import threading
@@ -23,11 +24,16 @@ class Transport:
 
     Runs in a background thread. Delayed replies are queued, so a delay does not
     hold back the responses to later requests.
+
+    netns is the path of a network namespace (e.g. /proc/<pid>/ns/net) that holds
+    the interface; by default the caller's namespace. Entering it needs
+    CAP_SYS_ADMIN over the namespace.
     """
 
-    def __init__(self, modem: Modem, interface: str) -> None:
+    def __init__(self, modem: Modem, interface: str, netns: str | None = None) -> None:
         self.modem = modem
         self.interface = interface
+        self.netns = netns
         self._sock: socket.socket | None = None
         self._wake_r, self._wake_w = socket.socketpair()
         self._stop = threading.Event()
@@ -46,11 +52,41 @@ class Transport:
     def start(self) -> None:
         if self._thread is not None:
             raise RuntimeError("transport already started")
-        sock = socket.socket(socket.AF_PACKET, socket.SOCK_DGRAM, socket.htons(ETHERTYPE))
-        sock.bind((self.interface, ETHERTYPE))
-        self._sock = sock
+        self._sock = self._open_socket()
         self._thread = threading.Thread(target=self._run, name=f"mt5311sim-{self.interface}")
         self._thread.start()
+
+    def _open_socket(self) -> socket.socket:
+        def open_socket() -> socket.socket:
+            sock = socket.socket(socket.AF_PACKET, socket.SOCK_DGRAM, socket.htons(ETHERTYPE))
+            sock.bind((self.interface, ETHERTYPE))
+            return sock
+
+        if self.netns is None:
+            return open_socket()
+
+        # A socket belongs to the network namespace it was created in. setns()
+        # changes the namespace of the calling thread only, so a helper thread
+        # creates the socket and ends.
+        result: dict[str, object] = {}
+
+        def in_netns() -> None:
+            try:
+                fd = os.open(self.netns, os.O_RDONLY)
+                try:
+                    os.setns(fd, os.CLONE_NEWNET)
+                finally:
+                    os.close(fd)
+                result["sock"] = open_socket()
+            except BaseException as e:  # passed on to the caller
+                result["error"] = e
+
+        thread = threading.Thread(target=in_netns, name="mt5311sim-netns")
+        thread.start()
+        thread.join()
+        if "error" in result:
+            raise result["error"]
+        return result["sock"]
 
     def stop(self) -> None:
         if self._thread is None:
