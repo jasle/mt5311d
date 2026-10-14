@@ -2,7 +2,7 @@
 
 ```
 Document:   MT5311-EBM-SPEC-RO
-Version:    1.5
+Version:    1.6
 Date:       2026-10-14
 Category:   Informational (unofficial)
 ```
@@ -584,6 +584,19 @@ upstream totals `…SigAtten9` and `…LnAtten9` read `7FFFFE`, while `…SnrMar
 valid (observed `00003C`, 6.0 dB). The per-band upstream values (indices `0`–`4`) are
 available for the bands in use; unused bands read `7FFFFE`.
 
+A second observation on the same device and line, about 15.8 h after synchronisation,
+gave, decoded with the units above: actual data rate DS 79613 kbit/s, US 33900 kbit/s;
+attainable rate DS 107868 kbit/s, US 49011 kbit/s; SNR margin DS 10.7 dB, US 15.9 dB;
+DS line/signal attenuation 11.5/12.3 dB; upstream line/signal attenuation per band
+US0 2.2/2.2 dB, US1 9.9/10.1 dB, US2 16.4/15.4 dB, with US3 and US4 reading `7FFFFE`;
+transmit power DS 11.6 dBm, US −1.6 dBm. All values are plausible for the line; no
+reference measurement of another modem is available to confirm the scalings.
+
+`xdsl2ChStatusActDelay0`/`2` and `xdsl2ChStatusActInp0`/`2` read `0` in both
+observations. This is consistent with a line without interleaving, but it is not known
+whether these registers are maintained when retransmission (G.INP) is in use, which
+reports its values in `xdslRtxChStatus*` (A.6) [UNVERIFIED].
+
 **Upstream attenuation on an RT device.** A host on an RT device SHOULD report upstream
 signal and line attenuation per band (indices `0`–`4`, skipping special values) and
 SHOULD NOT report an upstream total. This document defines no method to compute a total
@@ -606,12 +619,15 @@ For index `1` only `CorrectedBlocks` and `CodingViolations` are maintained. The
 instances `Fecs1`, `Es1`, `Ses1`, `Loss1` and `Uas1` (with every prefix) are **not
 maintained**; a host MUST NOT report them.
 
-An RT device updates the `Rt` table (observed: `xdslMetanoiaRtCurrCorrectedBlocks0` counts
-downstream FEC corrections in showtime). A host on an RT device SHOULD therefore take the
-downstream CRC and FEC counts from `xdslMetanoiaRt[Curr]{CodingViolations,CorrectedBlocks}0`
-and the upstream counts from index `1` of the same table. The `Ot` table of an RT device
-also holds non-zero values that differ from the `Rt` table; their meaning is unknown and
-a host on an RT device SHOULD NOT report them. The standard counters
+An RT device updates the `Rt` table. Observed in showtime:
+`xdslMetanoiaRtCurrCorrectedBlocks0` counts downstream FEC corrections; after 56735 s
+of showtime it read 14868, while `xdslMetanoiaRtCurrCorrectedBlocks1` (upstream, as
+reported by the peer) read 3 and both `…CodingViolations0`/`1` read 0. A host on an RT
+device SHOULD therefore take the downstream CRC and FEC counts from
+`xdslMetanoiaRt[Curr]{CodingViolations,CorrectedBlocks}0` and the upstream counts from
+index `1` of the same table. The `Ot` table of an RT device also holds non-zero values
+that differ from the `Rt` table; their meaning is unknown and a host on an RT device
+SHOULD NOT report them. The standard counters
 `xdsl2PMChCurr{15M,1Day}{CodingViolations,CorrectedBlocks}<i>` (index `0` = US, `2` = DS)
 are an alternative for interval-based reporting.
 
@@ -664,6 +680,11 @@ the xTU-R instance on RT (9.1); e.g. the own firmware version is
    - **Bit 19 = 0**: The first 7 bytes are base-62 digits (`a`–`z` = 0–25,
      `A`–`Z` = 26–51, `0`–`9` = 52–61). The version is
      `d0 "_" (d1·62 + d2) "_" (d3·62 + d4) "_" (d5·62 + d6)`, e.g. `1_58_2_30`.
+     [UNVERIFIED]
+
+Observed on an RT device in showtime: `xdslTwConfig3` = `1C62C0` (bit 19 set),
+`xdsl2LInvVersionNumber0` = `"20.2.2.6 VE_13_1"` (the peer, a Broadcom xTU-C) and
+`xdsl2LInvVersionNumber1` = `"1_60_8255 MT5311"` (the device itself).
 
 #### 9.2.5. G.994.1 Vendor ID
 
@@ -682,6 +703,8 @@ the peer's (network side) vendor ID is `xdsl2LInvG994VendorId0` and its own is
 The values are valid after the G.994.1 handshake. Observed on an RT device:
 `xdsl2LInvG994VendorId0` = `B50042 44434D 1CC000` (country `B500`, provider `BDCM`,
 vendor-specific `1CC0`), `xdsl2LInvG994VendorId1` = `B5004D 455441 000000` (`META`).
+A later observation of the same line showed the vendor-specific bytes `86D0` from the
+same provider (`B500 BDCM 86D0`).
 
 #### 9.2.6. Ethernet Data Path
 
@@ -718,8 +741,8 @@ Line status variables are valid only in showtime. Outside showtime they typicall
 
 The value is the bit number (decimal) of the active transmission mode in
 `Xdsl2TransmissionModeType` (RFC 5650, Section 4). It cannot be the bit mask itself:
-the mask has more than 24 bits and VDSL2 is at bits 56–58. Values used by this device
-class:
+the mask has more than 24 bits and VDSL2 is at bits 56–58 (`g9932AnnexA/B/C`). Values
+used by this device class:
 
 | Value | RFC 5650 bit name | Standard | Common name |
 |---|---|---|---|
@@ -727,8 +750,8 @@ class:
 | 20 | `g9923IsdnNonOverlapped` | G.992.3 Annex B | ADSL2 |
 | 40 | `g9925PotsNonOverlapped` | G.992.5 Annex A | ADSL2+ |
 | 42 | `g9925IsdnNonOverlapped` | G.992.5 Annex B | ADSL2+ |
-| 56 | `g9932NorthAmerica` | G.993.2 Annex A | VDSL2 |
-| 57 | `g9932Europe` | G.993.2 Annex B | VDSL2 |
+| 56 | `g9932AnnexA` | G.993.2 Annex A | VDSL2 |
+| 57 | `g9932AnnexB` | G.993.2 Annex B | VDSL2 |
 
 The value `57` has been observed on a VDSL2 line. Other values SHOULD be decoded with
 the full RFC 5650 bit list. The value `0`
@@ -757,7 +780,7 @@ bit set (the active profile); `Profiles` contains the allowed profiles. Observed
 
 | Register | Values |
 |---|---|
-| `xdsl2LineStatusTrellis{Us,Ds}` (X:006FD3 / X:006FD2) | `1` true, `2` false |
+| `xdsl2LineStatusTrellis{Us,Ds}` (X:006FD3 / X:006FD2) | `1` true (observed in showtime, both directions), `2` false |
 | `xdsl2LineStatusInitResult` (X:006F1B) | `0` noFail (observed in showtime), `1` configError, `2` configNotFeasible, `3` commFail, `4` noPeerAtu, `5` otherCause |
 | `xdsl2LineStatusPwrMngState` (X:006F1A) | **Not maintained.** It reads `4` (L3, its reset value) also in showtime. A host MUST NOT report it. |
 | `xdsl2LineStatusActSnrMode{Ds,Us}` (X:006F2D / X:006F2E) | `1` virtual noise disabled (observed in showtime), `2` virtual noise enabled. |
@@ -766,10 +789,10 @@ bit set (the active profile); `Profiles` contains the allowed profiles. Observed
 
 `xdslMetanoiaShowtimeSeconds` (X:006D35) holds the time in seconds since the start of
 the current showtime (observed in showtime shortly after synchronisation: `000027`,
-39 s). A host MAY report it as showtime uptime. Its value outside showtime and its
-behaviour after 2^24 s (about 194 days) are not known [UNVERIFIED]; a host SHOULD report
-it only while the line is in showtime and SHOULD treat a decrease without a loss of
-showtime as a wrap (7.2).
+39 s; later `00DD9F`, 56735 s). A host MAY report it as showtime uptime. Its value
+outside showtime and its behaviour after 2^24 s (about 194 days) are not known
+[UNVERIFIED]; a host SHOULD report it only while the line is in showtime and SHOULD treat
+a decrease without a loss of showtime as a wrap (7.2).
 
 ### 9.4. Retrain Reasons
 
@@ -787,9 +810,10 @@ of showtime.
 | 6 | SNR below minimum |
 
 A host SHOULD read the register of its own side right after the line leaves showtime.
-The value `0` presumably means that no cause has been recorded (e.g. no loss of showtime
-since start-up) [UNVERIFIED]; a host SHOULD report it as "none". Other values not listed
-above SHOULD be reported as "unknown" together with the number.
+The register keeps its value during the following showtime (observed: `1` in
+showtime). The value `0` presumably means that no cause has been recorded (e.g. no loss
+of showtime since start-up) [UNVERIFIED]; a host SHOULD report it as "none". Other
+values not listed above SHOULD be reported as "unknown" together with the number.
 
 ### 9.5. Configuration Enumerations
 
@@ -842,13 +866,13 @@ Typical status set per poll cycle on an RT device:
 
 Upstream attenuation on an RT device: 9.1. Counter selection: 9.1. Value classes: 7.3.
 
-Of the values in this table, the following have been observed on an RT device in
-showtime: SNR margin (DS and US), DS signal and line attenuation, transmit power (DS
-and US) and `xdslMetanoiaRtCurrCorrectedBlocks0` (9.1). The other entries follow from
-the register layout and the MIB semantics but have not been confirmed on a device
-[UNVERIFIED]; in particular a host SHOULD check on first use that
-`xdslMetanoiaRtCurrCodingViolations0`/`1` and `xdslMetanoiaRtCurrCorrectedBlocks1` change
-plausibly.
+All values in this table have been read on an RT device in showtime with plausible
+results (9.1). Not confirmed are:
+
+- the counting of CRC errors: `xdslMetanoiaRtCurrCodingViolations0`/`1` read 0 in all
+  observations, so an increase has not been seen [UNVERIFIED];
+- the meaning of a delay and INP of 0 when retransmission is in use (9.1)
+  [UNVERIFIED].
 
 ## 12. Security Considerations
 
@@ -1478,6 +1502,10 @@ D→H  0009 81 00000005 00  000001                upstream(1): branch 1.60 layou
 11. Atomicity of multi-command READ requests (5.5).
 12. `xdslMetanoiaShowtimeSeconds` outside showtime and after overflow (9.3.6).
 13. Retrain reason value `0` (9.4).
+14. Counting of CRC errors in `xdslMetanoiaRtCurrCodingViolations0`/`1` (9.1, 11).
+15. `xdsl2ChStatusActDelay`/`ActInp` when retransmission (G.INP) is in use (9.1).
+16. The base-62 format of the inventory version number (9.2.4); only the ASCII format has
+    been observed.
 
 **Open issues:**
 
