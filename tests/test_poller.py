@@ -7,7 +7,7 @@ before the modem answers.
 
 import pytest
 
-from conftest import ID_START, MAX_COMMANDS
+from conftest import DAEMON_INTERFACE, ID_START, MAX_COMMANDS
 from mt5311sim import protocol as sim
 from mt5311sim.device import FIRMWARE_BRANCH_161, FIRMWARE_UNKNOWN, LineState, Role
 from mt5311sim.line import FailureReason
@@ -314,3 +314,31 @@ def test_unreadable_registers_are_forgotten_with_a_new_layout(run_poller, simula
     assert states[1]["layout"] == "1.61"
     assert states[1]["unreadable"] == []
     assert states[1]["values"]["xdsl2LineStatusActAtpDs"] == 12.8
+
+
+def test_on_update_after_every_cycle(ucode, simulator):
+    source = """
+        import * as uloop from 'uloop';
+        import * as session from 'mt5311d.session';
+        import * as poller from 'mt5311d.poller';
+
+        uloop.init();
+        const s = session.create(SESSION);
+        s.open();
+
+        const updates = [];
+        const p = poller.create(s, {
+            interval: 100, max_age: 0,
+            on_update: (state) => push(updates, state.status),
+        });
+
+        p.start();
+        uloop.timer(350, () => { p.stop(); uloop.end(); });
+        uloop.run();
+        s.close();
+        printf('%J', updates);
+    """
+    updates = ucode.run(source, SESSION={"interface": DAEMON_INTERFACE, "mac": simulator.mac})
+    # One cycle at start, then one per interval after the end of each cycle.
+    assert 3 <= len(updates) <= 4
+    assert set(updates) == {"ok"}

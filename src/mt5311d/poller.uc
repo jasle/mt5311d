@@ -19,7 +19,7 @@ import * as values from 'mt5311d.values';
 
 const DEFAULTS = {
 	interval: 30000,	// ms between background cycles
-	max_age: 1000,		// ms during which refresh() returns the last state
+	max_age: 5000,		// ms during which refresh() returns the last state
 	reconnect_delay: 1000,	// ms after a failed connection attempt (6.4)
 	holdoff: 300000,	// ms before a register without response is read again
 	holdoff_max: 3600000,	// limit when the hold-off doubles after each failure
@@ -49,7 +49,9 @@ function same_identity(a, b) {
 }
 
 // Creates a poller for an open session.
-// options: { interval?, max_age?, reconnect_delay?, holdoff?, holdoff_max? }
+// options: { interval?, max_age?, reconnect_delay?, holdoff?, holdoff_max?,
+//            on_update? }
+// on_update(state) is called after every cycle, before the callbacks of refresh().
 export function create(session, options) {
 	const config = { ...DEFAULTS, ...options };
 
@@ -445,6 +447,9 @@ export function create(session, options) {
 
 			if (timer)
 				timer.set(config.interval);
+
+			if (config.on_update)
+				config.on_update(state);
 
 			for (let callback in callbacks)
 				callback(state);
