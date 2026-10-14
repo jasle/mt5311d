@@ -12,3 +12,9 @@ tasks:
     dir: sim
     cmds:
       - poetry run pytest -m "not netns" {{.CLI_ARGS}}
+
+  sim:test-netns:
+    desc: Run all simulator tests, including those over veth interfaces in a network namespace
+    dir: sim
+    cmds:
+      - unshare --map-root-user --net env MT5311SIM_NETNS=1 poetry run pytest {{.CLI_ARGS}}
