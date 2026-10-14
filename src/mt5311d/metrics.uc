@@ -71,7 +71,8 @@ const DIRECTIONS = {
 };
 
 // Error counters since start-up: near end (downstream, measured by the device)
-// and far end (upstream, reported by the peer) (9.1).
+// and far end (upstream, reported by the peer) (9.1). xdslMetanoiaRtLoss0 is left
+// out: on a device it read FFFE9F, which is no plausible count of seconds.
 const ERRORS = {
 	near: {
 		cv_c: 'xdslMetanoiaRtCodingViolations0',
@@ -79,7 +80,6 @@ const ERRORS = {
 		fecs: 'xdslMetanoiaRtFecs0',
 		es: 'xdslMetanoiaRtEs0',
 		ses: 'xdslMetanoiaRtSes0',
-		loss: 'xdslMetanoiaRtLoss0',
 		uas: 'xdslMetanoiaRtUas0',
 	},
 	far: {

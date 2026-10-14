@@ -84,8 +84,8 @@ def test_showtime(run_poller, simulator):
             "attndr": us.attainable_rate * 1000,
         },
         "errors": {
-            "near": {"cv_c": 3, "fec_c": 1234, "fecs": 0, "es": 0, "ses": 0, "loss": 0,
-                     "uas": 0},
+            # No "loss": xdslMetanoiaRtLoss0 is not plausible on a device.
+            "near": {"cv_c": 3, "fec_c": 1234, "fecs": 0, "es": 0, "ses": 0, "uas": 0},
             "far": {"cv_c": 1, "fec_c": 5},
         },
     }
