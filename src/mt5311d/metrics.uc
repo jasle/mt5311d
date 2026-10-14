@@ -236,3 +236,51 @@ export function metrics(state, info) {
 
 	return result;
 };
+
+// Passbands of a direction from the registers Visible{Us,Ds}Pb<i>{First,Last}Tone;
+// unused passbands read 0 to 0.
+function passbands(values, prefix, count) {
+	const limits = [];
+
+	for (let i = 0; i < count; i++) {
+		const first = values[`${prefix}${i}FirstTone`];
+		const last = values[`${prefix}${i}LastTone`];
+
+		if (first != null && last != null && (first || last))
+			push(limits, { first, last });
+	}
+
+	return limits;
+}
+
+// A spectrum without values. groups spans the tones in use: the LuCI spectrum
+// view divides groups * groupsize into the steps of its x axis and loops forever
+// if that is 0.
+function empty_spectrum(groups) {
+	return { groupsize: 1, groups, data: [] };
+}
+
+// The reply of `ubus call dsl statistics` for a poller state. Per-tone data
+// (bits, SNR, QLN, Hlog) cannot be read (spec Appendix C); these spectra are
+// empty but present, because the LuCI spectrum view reads them unconditionally.
+export function statistics(state) {
+	const values = (state.status == 'ok') ? state.values : {};
+	const downstream = passbands(values, 'VisibleDsPb', 4);
+	const upstream = passbands(values, 'VisibleUsPb', 5);
+	let groups = 1;
+
+	for (let band in [ ...downstream, ...upstream ])
+		groups = max(groups, band.last + 1);
+
+	const result = {
+		bands: {
+			downstream: { limits: downstream },
+			upstream: { limits: upstream },
+		},
+	};
+
+	for (let name in [ 'bits', 'snr', 'qln', 'hlog' ])
+		result[name] = { downstream: empty_spectrum(groups), upstream: empty_spectrum(groups) };
+
+	return result;
+};
