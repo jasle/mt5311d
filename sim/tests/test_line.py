@@ -168,3 +168,21 @@ def test_unknown_layout_only_sets_fixed_registers():
     line.showtime()
     assert device.peek(0x006C35) == 0x000329
     assert device.peek(0x00001D) == 0x00000F
+
+
+def test_seconds_counters_since_start_up(device, line):
+    line.tick(3)  # not in showtime
+    line.showtime()
+    line.error_rates["ds"].crc = 1
+    line.error_rates["ds"].fec = 2
+    line.tick(4)
+    line.error_rates["ds"].crc = 0
+    line.tick(2)
+    line.retrain(FailureReason.LOSS_OF_SIGNAL)
+    line.showtime()
+    # Since start-up, not reset by the retrain.
+    assert value(device, "xdslMetanoiaRtEs0") == 4
+    assert value(device, "xdslMetanoiaRtFecs0") == 6
+    assert value(device, "xdslMetanoiaRtUas0") == 3
+    assert value(device, "xdslMetanoiaRtSes0") == 0
+    assert value(device, "xdslMetanoiaRtLoss0") == 0

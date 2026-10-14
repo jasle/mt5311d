@@ -140,6 +140,9 @@ class Line:
         # Errors per second while in showtime, per direction ("ds", "us").
         self.error_rates = {"ds": Counters(), "us": Counters()}
         self.totals = {"ds": Counters(), "us": Counters()}
+        # Downstream (near-end) seconds since start-up: FEC seconds, errored
+        # seconds, unavailable seconds.
+        self.seconds = {"fecs": 0, "es": 0, "uas": 0}
         self.current = {"ds": Counters(), "us": Counters()}
         self.intervals = {"15M": _Interval(INTERVAL_15M), "1Day": _Interval(INTERVAL_1DAY)}
         self._write_all()
@@ -195,9 +198,12 @@ class Line:
                 for interval in self.intervals.values():
                     interval.es[index] += int(rate.crc > 0)
                     interval.fecs[index] += int(rate.fec > 0)
+            self.seconds["es"] += int(self.error_rates["ds"].crc > 0)
+            self.seconds["fecs"] += int(self.error_rates["ds"].fec > 0)
         else:
             for interval in self.intervals.values():
                 interval.uas = [n + 1 for n in interval.uas]
+            self.seconds["uas"] += 1
 
         # At the end of an interval its counters start again from zero (7.2).
         for name, interval in self.intervals.items():
@@ -298,6 +304,11 @@ class Line:
                 c = counters[direction]
                 d.set(f"xdslMetanoiaRt{prefix}CodingViolations{index}", words.counter(c.crc))
                 d.set(f"xdslMetanoiaRt{prefix}CorrectedBlocks{index}", words.counter(c.fec))
+        d.set("xdslMetanoiaRtFecs0", words.counter(self.seconds["fecs"]))
+        d.set("xdslMetanoiaRtEs0", words.counter(self.seconds["es"]))
+        d.set("xdslMetanoiaRtSes0", 0)
+        d.set("xdslMetanoiaRtLoss0", 0)
+        d.set("xdslMetanoiaRtUas0", words.counter(self.seconds["uas"]))
 
         for name, interval in self.intervals.items():
             for index in (0, 1):

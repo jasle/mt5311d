@@ -128,10 +128,12 @@ def _define() -> None:
                 _add(f"xdsl2PMChCurr{interval}{field}{i}", 0x007C9D + base, 0x007CB2 + base)
 
     # Vendor counter table of the xTU-R (9.1). Per index: blocks of 10 words for the
-    # totals, Curr and LastSec; only CorrectedBlocks and CodingViolations are needed.
+    # totals since start-up, Curr and LastSec. Of index 1 only CorrectedBlocks and
+    # CodingViolations are maintained; LastSec is not needed.
+    fields = ["CorrectedBlocks", "CodingViolations", "Fecs", "Es", "Ses", "Loss", "Uas"]
     for i in range(2):
         for prefix, start in [("", 0), ("Curr", 10)]:
-            for offset, field in enumerate(["CorrectedBlocks", "CodingViolations"]):
+            for offset, field in enumerate(fields if (i, prefix) == (0, "") else fields[:2]):
                 base = 30 * i + start + offset
                 _add(f"xdslMetanoiaRt{prefix}{field}{i}", 0x007F1D + base, 0x007F32 + base)
 
