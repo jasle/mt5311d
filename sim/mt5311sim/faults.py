@@ -7,16 +7,13 @@ spec sections 6.2 to 6.4: lost and late responses and error responses.
 
 from __future__ import annotations
 
-import logging
 import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from . import protocol
 from .device import Device
-from .protocol import ProtocolError, Read, ReadResponse
-
-log = logging.getLogger(__name__)
+from .protocol import Read, ReadResponse
 
 Predicate = Callable[[protocol.Request], bool]
 
@@ -89,14 +86,8 @@ class Faults:
         with self._lock:
             self._rules.clear()
 
-    def handle(self, host: bytes, message: bytes) -> list[Reply]:
-        """Processes one request; returns the replies to send."""
-        try:
-            request = protocol.decode_request(message)
-        except ProtocolError as e:
-            log.debug("ignoring message from %s: %s", host.hex(":"), e)
-            return []
-
+    def respond(self, host: bytes, request: protocol.Request) -> list[Reply]:
+        """Processes one decoded request; returns the replies to send."""
         with self._lock:
             if self._take("drop", request):
                 return []

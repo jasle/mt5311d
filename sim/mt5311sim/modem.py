@@ -2,16 +2,33 @@
 
 from __future__ import annotations
 
+import logging
+import time
+from dataclasses import dataclass
+
+from . import protocol
 from .device import FIRMWARE_750202, Device, DeviceConfig, Firmware, Role
 from .faults import Faults, Reply
 from .line import Line
+
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Received:
+    """A request the modem received."""
+
+    time: float  # time.monotonic()
+    host: bytes
+    request: protocol.Request
 
 
 class Modem:
     """Entry point for transports and tests.
 
     The transport passes every received message to handle(). Tests change the
-    line through `line` and inject faults through `faults`.
+    line through `line`, inject faults through `faults` and find every valid
+    request in `received`.
     """
 
     def __init__(self, firmware: Firmware = FIRMWARE_750202, role: Role = Role.RT,
@@ -19,9 +36,17 @@ class Modem:
         self.device = Device(firmware, role, config)
         self.line = Line(self.device)
         self.faults = Faults(self.device)
+        self.received: list[Received] = []
 
     def handle(self, host: bytes, message: bytes) -> list[Reply]:
-        return self.faults.handle(host, message)
+        """Processes one message; returns the replies to send."""
+        try:
+            request = protocol.decode_request(message)
+        except protocol.ProtocolError as e:
+            log.debug("ignoring message from %s: %s", host.hex(":"), e)
+            return []
+        self.received.append(Received(time.monotonic(), host, request))
+        return self.faults.respond(host, request)
 
     def reboot(self, firmware: Firmware | None = None) -> None:
         """Restarts the modem, optionally with another firmware build.

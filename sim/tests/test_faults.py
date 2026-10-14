@@ -108,3 +108,12 @@ def test_reboot_with_other_firmware(modem):
     assert modem.device.peek(0x006C32) == 0x080217
     modem.line.showtime()
     assert modem.device.peek(0x007016) == 0x0000FB  # SigAtten10 at its 1.61 address
+
+
+def test_received_requests_are_recorded(modem):
+    # The fixture sent CONNECT stage 1 and 2.
+    modem.received.clear()
+    send(modem, read([0x006C36], seq=5))
+    modem.handle(HOST, b"\x00\x07\x01")  # malformed, not recorded
+    assert [(r.host, r.request) for r in modem.received] == [(HOST, read([0x006C36], seq=5))]
+    assert modem.received[0].time > 0

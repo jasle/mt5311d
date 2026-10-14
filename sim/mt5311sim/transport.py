@@ -10,6 +10,7 @@ import select
 import socket
 import threading
 import time
+from collections.abc import Callable
 
 from .modem import Modem
 from .protocol import ETHERTYPE, RESPONSE_MIN_LEN, pad
@@ -19,6 +20,34 @@ log = logging.getLogger(__name__)
 MAX_FRAME = 1514
 
 
+def open_in_netns(netns: str, open_socket: Callable[[], socket.socket]) -> socket.socket:
+    """Calls open_socket in the network namespace at path netns.
+
+    A socket belongs to the namespace it was created in. setns() changes the
+    namespace of the calling thread only, so a helper thread creates the socket
+    and ends. Entering the namespace needs CAP_SYS_ADMIN over it.
+    """
+    result: dict[str, object] = {}
+
+    def in_netns() -> None:
+        try:
+            fd = os.open(netns, os.O_RDONLY)
+            try:
+                os.setns(fd, os.CLONE_NEWNET)
+            finally:
+                os.close(fd)
+            result["sock"] = open_socket()
+        except BaseException as e:  # passed on to the caller
+            result["error"] = e
+
+    thread = threading.Thread(target=in_netns, name="mt5311sim-netns")
+    thread.start()
+    thread.join()
+    if "error" in result:
+        raise result["error"]
+    return result["sock"]
+
+
 class Transport:
     """Receives EBM frames on an interface and sends the modem's replies.
 
@@ -26,8 +55,7 @@ class Transport:
     hold back the responses to later requests.
 
     netns is the path of a network namespace (e.g. /proc/<pid>/ns/net) that holds
-    the interface; by default the caller's namespace. Entering it needs
-    CAP_SYS_ADMIN over the namespace.
+    the interface; by default the caller's namespace (see open_in_netns()).
     """
 
     def __init__(self, modem: Modem, interface: str, netns: str | None = None) -> None:
@@ -62,31 +90,7 @@ class Transport:
             sock.bind((self.interface, ETHERTYPE))
             return sock
 
-        if self.netns is None:
-            return open_socket()
-
-        # A socket belongs to the network namespace it was created in. setns()
-        # changes the namespace of the calling thread only, so a helper thread
-        # creates the socket and ends.
-        result: dict[str, object] = {}
-
-        def in_netns() -> None:
-            try:
-                fd = os.open(self.netns, os.O_RDONLY)
-                try:
-                    os.setns(fd, os.CLONE_NEWNET)
-                finally:
-                    os.close(fd)
-                result["sock"] = open_socket()
-            except BaseException as e:  # passed on to the caller
-                result["error"] = e
-
-        thread = threading.Thread(target=in_netns, name="mt5311sim-netns")
-        thread.start()
-        thread.join()
-        if "error" in result:
-            raise result["error"]
-        return result["sock"]
+        return open_socket() if self.netns is None else open_in_netns(self.netns, open_socket)
 
     def stop(self) -> None:
         if self._thread is None:
