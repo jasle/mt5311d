@@ -3,18 +3,23 @@
 //
 // A poll cycle connects if needed, identifies the firmware and selects the
 // address layout, then reads the identification block followed by all registers
-// of the register table. Measurement values are only reported in showtime; the
+// of the register table. Cycles run on demand (refresh) and, once started, in
+// the background at a fixed interval, so that counter overflows and retrains are
+// seen even when nobody asks. Measurement values are only reported in showtime; the
 // 24-bit counters are extended to counters without overflow since the start of
 // the showtime.
 
 'use strict';
 
+import * as uloop from 'uloop';
 import * as layout from 'mt5311d.layout';
 import * as registers from 'mt5311d.registers';
 import * as protocol from 'mt5311d.protocol';
 import * as values from 'mt5311d.values';
 
 const DEFAULTS = {
+	interval: 30000,	// ms between background cycles
+	max_age: 1000,		// ms during which refresh() returns the last state
 	reconnect_delay: 1000,	// ms after a failed connection attempt (6.4)
 };
 
@@ -35,7 +40,8 @@ function same_identity(a, b) {
 	       a.signature == b.signature;
 }
 
-// Creates a poller for an open session. options: { reconnect_delay? }
+// Creates a poller for an open session.
+// options: { interval?, max_age?, reconnect_delay? }
 export function create(session, options) {
 	const config = { ...DEFAULTS, ...options };
 
@@ -48,6 +54,8 @@ export function create(session, options) {
 	let previous = null;		// { showtime, raw } of the previous cycle
 	let counters = {};
 	let busy = false;
+	let waiting = [];		// callbacks of refresh() for the running cycle
+	let timer = null;		// background cycles, after start()
 	let state = { status: 'connecting', reason: null, updated: null };
 
 	function update(fields) {
@@ -271,17 +279,62 @@ export function create(session, options) {
 		});
 	}
 
+	// Runs a cycle and then passes the state to all waiting callbacks. The next
+	// background cycle follows one interval after the end of any cycle.
+	function run_cycle() {
+		busy = true;
+
+		cycle(() => {
+			const callbacks = waiting;
+
+			busy = false;
+			waiting = [];
+
+			if (timer)
+				timer.set(config.interval);
+
+			for (let callback in callbacks)
+				callback(state);
+		}, true);
+	}
+
+	function on_timer() {
+		if (!busy)
+			run_cycle();
+	}
+
 	return {
-		// Runs a poll cycle and passes the new state to callback.
+		// Starts the background cycles, beginning with one cycle now.
+		start: function() {
+			if (timer)
+				return;
+
+			timer = uloop.timer(null, on_timer);
+
+			if (!busy)
+				run_cycle();
+		},
+
+		// Stops the background cycles; a running cycle still completes.
+		stop: function() {
+			if (timer)
+				timer.cancel();
+
+			timer = null;
+		},
+
+		// Passes the current state to callback: at once if it is younger than
+		// max_age, otherwise after a new cycle. Calls during a running cycle wait
+		// for its result.
 		refresh: function(callback) {
 			if (busy)
-				die('a poll cycle is already running');
+				return push(waiting, callback);
 
-			busy = true;
-			cycle(() => {
-				busy = false;
-				callback(state);
-			}, true);
+			if (state.updated != null && now_ms() - state.updated < config.max_age)
+				return callback(state);
+
+			push(waiting, callback);
+			run_cycle();
 		},
 
 		// The state of the last cycle.

@@ -12,9 +12,10 @@ from mt5311sim import protocol as sim
 from mt5311sim.device import FIRMWARE_BRANCH_161, FIRMWARE_UNKNOWN, LineState, Role
 from mt5311sim.line import FailureReason
 
-# Runs STEPS with a poller and prints the state after each refresh:
-#   [ 'refresh' ]     -> the state passed to the refresh callback
-#   [ 'wait', ms ]    -> nothing
+# Runs STEPS with a poller and prints the results of the refresh steps:
+#   [ 'refresh' ]        -> the state passed to the refresh callback
+#   [ 'refresh', n ]     -> n refreshes at once; the list of their states
+#   [ 'start' ], [ 'stop' ], [ 'wait', ms ]
 DRIVER = """
     import * as uloop from 'uloop';
     import * as session from 'mt5311d.session';
@@ -39,8 +40,27 @@ DRIVER = """
 
         const step = STEPS[i++];
 
-        if (step[0] == 'refresh')
+        if (step[0] == 'refresh' && length(step) == 1)
             p.refresh((state) => { push(results, state); next(); });
+        else if (step[0] == 'refresh') {
+            const states = [];
+            for (let j = 0; j < step[1]; j++)
+                p.refresh((state) => {
+                    push(states, state);
+                    if (length(states) == step[1]) {
+                        push(results, states);
+                        next();
+                    }
+                });
+        }
+        else if (step[0] == 'start') {
+            p.start();
+            next();
+        }
+        else if (step[0] == 'stop') {
+            p.stop();
+            next();
+        }
         else
             uloop.timer(step[1], next);
     }
@@ -60,6 +80,7 @@ MAX_COMMANDS = 64
 def run_poller(ucode, simulator):
     def run_poller(*steps, mac=None, watchdog=10000, **options):
         options.setdefault("reconnect_delay", 100)
+        options.setdefault("max_age", 0)
         return ucode.run(DRIVER, SESSION={"interface": DAEMON_INTERFACE,
                                           "mac": mac or simulator.mac},
                          OPTIONS=options, STEPS=list(steps), WATCHDOG=watchdog)
@@ -234,3 +255,44 @@ def test_modem_not_reachable(run_poller):
         "no response to CONNECT stage 1",
     ]
     assert {s["status"] for s in states} == {"error"}
+
+
+# Triggering of cycles
+
+
+def poll_reads(simulator):
+    """Number of poll cycles that read from the modem."""
+    return sum(1 for r in simulator.modem.received
+               if isinstance(r.request, sim.Read) and r.request.commands[0].address == ID_START
+               and len(r.request.commands) == MAX_COMMANDS)
+
+
+def test_refresh_within_max_age_returns_the_last_state(run_poller, simulator):
+    states = run_poller(REFRESH, REFRESH, ["wait", 300], REFRESH, max_age=200)
+    assert states[0] == states[1]
+    assert states[2]["updated"] > states[1]["updated"]
+    assert poll_reads(simulator) == 2
+
+
+def test_concurrent_refreshes_share_one_cycle(run_poller, simulator):
+    (states,) = run_poller(["refresh", 3])
+    assert len(states) == 3
+    assert states[0] == states[1] == states[2]
+    assert poll_reads(simulator) == 1
+
+
+def test_background_cycles(run_poller, simulator):
+    run_poller(["start"], ["wait", 1000], ["stop"], interval=200)
+    # One cycle at start, then one per interval after the end of each cycle.
+    assert 4 <= poll_reads(simulator) <= 6
+    count = poll_reads(simulator)
+
+    run_poller(["start"], ["stop"], ["wait", 500], interval=100)
+    assert poll_reads(simulator) == count + 1
+
+
+def test_refresh_during_background_cycle(run_poller, simulator):
+    # start() begins a cycle; the refresh waits for it instead of starting another.
+    (state,) = run_poller(["start"], REFRESH, ["stop"], interval=10000)
+    assert state["status"] == "ok"
+    assert poll_reads(simulator) == 1
