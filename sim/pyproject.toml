@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+mt5311sim = "mt5311sim.__main__:main"
+
 [tool.poetry]
 packages = [{ include = "mt5311sim" }]
 

@@ -18,3 +18,9 @@ tasks:
     dir: sim
     cmds:
       - unshare --map-root-user --net env MT5311SIM_NETNS=1 poetry run pytest {{.CLI_ARGS}}
+
+  sim:run:
+    desc: Run the simulator on an interface (needs CAP_NET_RAW), e.g. task sim:run -- -i veth1
+    dir: sim
+    cmds:
+      - poetry run mt5311sim {{.CLI_ARGS}}

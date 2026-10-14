@@ -91,6 +91,7 @@ class Transport:
         message, (_ifname, _proto, pkttype, _hatype, host) = self._sock.recvfrom(MAX_FRAME)
         if pkttype == socket.PACKET_OUTGOING:
             return
+        log.debug("<- %s %s", host.hex(":"), message.hex())
         try:
             replies = self.modem.handle(host, message)
         except Exception:
@@ -106,5 +107,6 @@ class Transport:
         now = time.monotonic()
         while self._pending and self._pending[0][0] <= now:
             _due, _order, host, message = heapq.heappop(self._pending)
+            log.debug("-> %s %s", host.hex(":"), message.hex())
             frame = pad(message, RESPONSE_MIN_LEN)
             self._sock.sendto(frame, (self.interface, ETHERTYPE, 0, 0, host))
