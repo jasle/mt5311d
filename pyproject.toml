@@ -1,0 +1,17 @@
+[project]
+name = "mt5311d"
+description = "Tests for the ucode modules of mt5311d"
+requires-python = ">=3.11"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.1"
+mt5311sim = { path = "sim", develop = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "netns: needs a network namespace with a veth pair",
+]

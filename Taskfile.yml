@@ -1,6 +1,16 @@
 version: '3'
 
 tasks:
+  install:
+    desc: Install the test dependencies, including the simulator
+    cmds:
+      - poetry install
+
+  test:
+    desc: Run the tests of the ucode modules
+    cmds:
+      - poetry run pytest -m "not netns" {{.CLI_ARGS}}
+
   sim:install:
     desc: Install the simulator and its test dependencies
     dir: sim
