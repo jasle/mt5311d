@@ -131,10 +131,10 @@ class _Interval:
 class Line:
     """Line state, values and counters of a device; writes them into its memory."""
 
-    def __init__(self, device: Device) -> None:
+    def __init__(self, device: Device, status: LineStatus | None = None) -> None:
         self.device = device
         self.state = LineState.IDLE
-        self.status = LineStatus()
+        self.status = status or LineStatus()
         self.failure_reason = FailureReason.NONE
         self.showtime_seconds = 0
         # Errors per second while in showtime, per direction ("ds", "us").

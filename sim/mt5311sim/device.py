@@ -176,9 +176,13 @@ class Device:
             log.debug("ignoring message from %s: %s", host.hex(":"), e)
             return None
 
-        with self.lock:
-            response = self._dispatch(host, request)
+        response = self.respond(host, request)
         return None if response is None else protocol.encode_response(response)
+
+    def respond(self, host: bytes, request: protocol.Request) -> protocol.Response | None:
+        """Processes one decoded request from host; returns the response or None."""
+        with self.lock:
+            return self._dispatch(host, request)
 
     def _dispatch(self, host: bytes, request: protocol.Request) -> protocol.Response | None:
         match request:
