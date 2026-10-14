@@ -11,10 +11,28 @@ customer side (RT) are supported.
 
 ## Status
 
-The daemon is complete and tested against a modem simulator; it has not yet been run
-as a service on a router. It is based on the protocol specification
-[`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md). The simulator for
-development and tests is in [`sim/`](sim/README.md).
+mt5311d runs as a service on a router with OpenWrt 25.12.5 and an MT5311 with
+firmware 750202 on a VDSL2 17a line; the LuCI DSL status and the xDSL statistics page
+show its data. It is based on the protocol specification
+[`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md). The modem simulator
+for development and tests is in [`sim/`](sim/README.md).
+
+## Limitations
+
+- Only modems running as the customer side (RT) are supported; a modem running as the
+  network side (OT) is reported as not supported.
+- Only firmware with the address layouts of branches 1.60 and 1.61 is supported (see
+  the specification, section 8); other firmware is reported as not supported.
+- There is no per-tone data (bits, SNR, QLN, Hlog): `statistics` has the band limits,
+  but the LuCI spectrum page shows empty charts.
+- `metrics` leaves out what the modem does not provide or what is not reliable, e.g.
+  the upstream attenuation (`latn`, `satn`), vectoring, bitswap, retransmission
+  (G.INP), `errors.near.loss` and the far-end counters other than `cv_c` and `fec_c`.
+- The error counters count since the start of the modem and are extended beyond the
+  modem's 24 bits; after the session with the modem is lost they start again from the
+  modem's values.
+- Delay and INP read 0 on a line without interleaving; with retransmission their
+  meaning is not confirmed (specification, Appendix C).
 
 ## Installation
 
@@ -38,11 +56,13 @@ PKG_VERSION:=0.1.0
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=<URL of this repository>
-PKG_SOURCE_VERSION:=<commit>
-PKG_MIRROR_HASH:=skip
+PKG_SOURCE_URL:=https://github.com/jasle/mt5311d.git
+PKG_SOURCE_VERSION:=<commit of the release>
+PKG_MIRROR_HASH:=<from make package/mt5311d/check FIXUP=1>
 
+PKG_MAINTAINER:=jasle
 PKG_LICENSE:=GPL-3.0
+PKG_LICENSE_FILES:=LICENSE
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -53,6 +73,11 @@ define Package/mt5311d
   DEPENDS:=+ucode +ucode-mod-fs +ucode-mod-log +ucode-mod-socket \
     +ucode-mod-struct +ucode-mod-ubus +ucode-mod-uci +ucode-mod-uloop
   PKGARCH:=all
+endef
+
+define Package/mt5311d/description
+  Provides the line status of a Metanoia MT5311 VDSL2 SFP modem as ubus
+  object "dsl" in the format of the Lantiq DSL daemon.
 endef
 
 define Package/mt5311d/conffiles
