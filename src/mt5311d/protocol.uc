@@ -6,7 +6,7 @@
 
 'use strict';
 
-import { pack } from 'struct';
+import { pack, unpack } from 'struct';
 
 export const ETHERTYPE = 0x6120;
 
@@ -24,10 +24,13 @@ export const SPACE_X = 1;
 export const WORD_BYTES = 3;
 export const MAX_COMMANDS = 64;
 
+const HEADER_LEN = 8;
+
 // Requests are padded to a 64-byte frame without FCS (4.1).
 const REQUEST_MIN_LEN = 64 - 14;
 
 const CONNECT1_MARKER = 0xffffffff;
+const CONNECT1_MAGIC = 0x95743926;
 const CONNECT2_KEY = 'noia';
 
 function check_uint(name, value, max) {
@@ -74,4 +77,72 @@ export function read(seq, addresses) {
 // DISCONNECT (5.4).
 export function disconnect(seq) {
 	return request(TYPE_DISCONNECT, seq, '');
+};
+
+// Parses a received response (4.2 to 5.5). Bytes after the Length field are
+// padding. Returns null for anything that is not a valid response, e.g. a
+// truncated frame or the legacy short format (5.6).
+//
+// CONNECT: { type, seq, status, stage }
+// READ:    { type, seq, status, words } (words is empty for an error response)
+export function decode(message) {
+	if (type(message) != 'string' || length(message) < HEADER_LEN)
+		return null;
+
+	const header = unpack('>HBIB', message);
+	const len = header[0], msg_type = header[1], seq = header[2], status = header[3];
+
+	// In a response, Length covers Type, Sequence, Status and the payload (4.3).
+	if (len < HEADER_LEN - 2 || length(message) < 2 + len)
+		return null;
+
+	const payload = substr(message, HEADER_LEN, len - (HEADER_LEN - 2));
+
+	if (msg_type == (TYPE_CONNECT | RESPONSE_BIT)) {
+		if (status == STATUS_CONNECT1 && length(payload) >= 8 &&
+		    unpack('>I', payload, 4)[0] == CONNECT1_MAGIC)
+			return { type: msg_type, seq, status, stage: 1 };
+
+		if (status == STATUS_CONNECT2)
+			return { type: msg_type, seq, status, stage: 2 };
+
+		return null;
+	}
+
+	if (msg_type == (TYPE_READ | RESPONSE_BIT)) {
+		if (length(payload) % WORD_BYTES)
+			return null;
+
+		const words = [];
+
+		if (status == STATUS_OK)
+			for (let i = 0; i < length(payload); i += WORD_BYTES)
+				push(words, (ord(payload, i) << 16) | (ord(payload, i + 1) << 8) |
+				            ord(payload, i + 2));
+
+		return { type: msg_type, seq, status, words };
+	}
+
+	return null;
+};
+
+// Tells whether a decoded response answers the outstanding request (6.2).
+//
+// expected describes the request: { mac, type, seq } plus stage for CONNECT and
+// count (number of commands) for READ. source is the sender's MAC address. A
+// READ response with an error status matches; the caller handles it (6.4).
+export function matches(expected, source, response) {
+	if (response == null || type(source) != 'string' || lc(source) != lc(expected.mac))
+		return false;
+
+	if (response.type != (expected.type | RESPONSE_BIT) || response.seq != expected.seq)
+		return false;
+
+	if (expected.type == TYPE_CONNECT)
+		return response.stage == expected.stage;
+
+	if (expected.type == TYPE_READ)
+		return response.status != STATUS_OK || length(response.words) == expected.count;
+
+	return false;
 };
