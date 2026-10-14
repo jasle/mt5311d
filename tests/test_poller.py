@@ -296,3 +296,86 @@ def test_refresh_during_background_cycle(run_poller, simulator):
     (state,) = run_poller(["start"], REFRESH, ["stop"], interval=10000)
     assert state["status"] == "ok"
     assert poll_reads(simulator) == 1
+
+
+# Failed requests (6.4)
+
+ATP_DS = 0x006F24  # xdsl2LineStatusActAtpDs in layout 1.60
+VENDOR_ID0 = 0x0079C8  # xdsl2LInvG994VendorId0, 3 words, in layout 1.60
+
+
+def reads_of(simulator, address):
+    return sum(1 for r in simulator.modem.received if isinstance(r.request, sim.Read)
+               and any(c.address == address for c in r.request.commands))
+
+
+def test_register_with_error_response_is_skipped(run_poller, simulator):
+    modem = simulator.modem
+    modem.line.showtime()
+    modem.faults.fail_reads([ATP_DS], status=0x05)
+
+    states = run_poller(REFRESH, REFRESH)
+    for state in states:
+        assert state["status"] == "ok"
+        assert state["values"]["xdsl2LineStatusActAtpDs"] is None
+        assert state["values"]["xdsl2LineStatusActAtpUs"] == -2.9
+        assert state["unreadable"] == ["xdsl2LineStatusActAtpDs"]
+    # Found by reading the failed request's addresses one by one in the first
+    # cycle, then left out; the session stays.
+    assert reads_of(simulator, ATP_DS) == 2
+    assert len([r for r in modem.received if isinstance(r.request, sim.ConnectStage1)]) == 1
+
+
+def test_register_without_response_is_suspended(run_poller, simulator):
+    modem = simulator.modem
+    modem.line.showtime()
+    modem.faults.drop(count=None, when=lambda r: isinstance(r, sim.Read) and any(
+        c.address == ATP_DS for c in r.commands))
+
+    states = run_poller(REFRESH, REFRESH, ["wait", 400], REFRESH,
+                        holdoff=300, holdoff_max=10000, watchdog=20000)
+    assert [s["suspended"] for s in states] == [["xdsl2LineStatusActAtpDs"]] * 3
+    assert states[0]["values"]["xdsl2LineStatusActAtpDs"] is None
+    assert states[0]["values"]["xdsl2LineStatusActAtpUs"] == -2.9
+    # Cycle 1: 3 attempts in the full request, 3 single; cycle 2 leaves it out;
+    # cycle 3 after the hold-off reads it again.
+    assert reads_of(simulator, ATP_DS) == 12
+
+
+def test_suspended_register_is_read_again_after_the_holdoff(run_poller, simulator):
+    modem = simulator.modem
+    modem.line.showtime()
+    modem.faults.drop(count=6, when=lambda r: isinstance(r, sim.Read) and any(
+        c.address == ATP_DS for c in r.commands))
+
+    states = run_poller(REFRESH, ["wait", 400], REFRESH, holdoff=300, watchdog=20000)
+    assert states[0]["suspended"] == ["xdsl2LineStatusActAtpDs"]
+    assert states[1]["suspended"] == []
+    assert states[1]["values"]["xdsl2LineStatusActAtpDs"] == 12.8
+
+
+def test_multi_word_register_with_failed_word(run_poller, simulator):
+    modem = simulator.modem
+    modem.line.showtime()
+    modem.faults.fail_reads([VENDOR_ID0 + 1])
+    (state,) = run_poller(REFRESH)
+    assert state["values"]["xdsl2LInvG994VendorId0"] is None
+    assert state["values"]["xdsl2LInvG994VendorId1"]["provider"] == "META"
+    assert state["unreadable"] == ["xdsl2LInvG994VendorId0"]
+
+
+def test_unreadable_registers_are_forgotten_with_a_new_layout(run_poller, simulator, on_cycle):
+    modem = simulator.modem
+    modem.line.showtime()
+    modem.faults.fail_reads([ATP_DS], count=2)
+
+    def change():
+        modem.reboot(FIRMWARE_BRANCH_161)
+        modem.line.showtime()
+
+    on_cycle(2, change)
+    states = run_poller(REFRESH, REFRESH)
+    assert states[0]["unreadable"] == ["xdsl2LineStatusActAtpDs"]
+    assert states[1]["layout"] == "1.61"
+    assert states[1]["unreadable"] == []
+    assert states[1]["values"]["xdsl2LineStatusActAtpDs"] == 12.8
