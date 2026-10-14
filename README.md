@@ -7,7 +7,8 @@ expose them on ubus.
 
 The daemon is not implemented yet. The repository currently contains the protocol
 specification it will be based on:
-[`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md).
+[`MT5311_EBM_Monitoring_Spec.md`](MT5311_EBM_Monitoring_Spec.md), and the beginning of
+a modem simulator for development and tests in [`sim/`](sim/README.md).
 
 ## License
 
