@@ -20,7 +20,7 @@ import * as metrics from 'mt5311d.metrics';
 import * as poller from 'mt5311d.poller';
 import * as session from 'mt5311d.session';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const BOARD_ENTRY = { type: 'vdsl' };
 const USAGE = 'usage: mt5311d [-c <uci-dir>] [-s <ubus-socket>] [-b <board.json>] [-f]\n' +
               '       mt5311d -v | -h\n';
