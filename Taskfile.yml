@@ -18,6 +18,21 @@ tasks:
       - task: pytest
         vars: { ARGS: 'tests/test_syntax.py {{.CLI_ARGS}}' }
 
+  tag:
+    desc: Tag the release of the version in src/mt5311d.uc on a clean HEAD
+    vars:
+      VERSION: { sh: 'sed -n "s/^const VERSION = ''\(.*\)'';\$/\1/p" src/mt5311d.uc' }
+    preconditions:
+      - sh: test -n "{{.VERSION}}"
+        msg: no VERSION in src/mt5311d.uc
+      - sh: test -z "$(git status --porcelain --untracked-files=no)"
+        msg: the working tree has uncommitted changes
+      - sh: '! git rev-parse -q --verify "refs/tags/{{.VERSION}}" >/dev/null'
+        msg: tag {{.VERSION}} exists already
+    cmds:
+      - git tag -a "{{.VERSION}}" -m "mt5311d {{.VERSION}}"
+      - git tag -n1 "{{.VERSION}}"
+
   pytest:
     internal: true
     # pytest runs in podman's user namespace, where it may enter the network
