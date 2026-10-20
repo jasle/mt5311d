@@ -52,16 +52,15 @@ Example feed Makefile:
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=mt5311d
-PKG_VERSION:=0.1.0
+PKG_VERSION:=0.2.0
 PKG_RELEASE:=1
 
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/jasle/mt5311d.git
-PKG_SOURCE_VERSION:=<commit of the release>
-PKG_MIRROR_HASH:=<from make package/mt5311d/check FIXUP=1>
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
+PKG_SOURCE_URL:=https://codeload.github.com/jasle/$(PKG_NAME)/tar.gz/$(PKG_VERSION)?
+PKG_HASH:=<from make package/mt5311d/check FIXUP=1>
 
-PKG_MAINTAINER:=jasle
-PKG_LICENSE:=GPL-3.0
+PKG_MAINTAINER:=jasle <jasle@riseup.net>
+PKG_LICENSE:=GPL-3.0-or-later
 PKG_LICENSE_FILES:=LICENSE
 
 include $(INCLUDE_DIR)/package.mk
