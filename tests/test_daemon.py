@@ -6,8 +6,10 @@ SIGTERM and stops ubusd, so that nothing keeps running in the container.
 """
 
 import json
+import re
 import shlex
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +18,15 @@ from ucode import CONTAINER_REPO
 
 DAEMON = f"{CONTAINER_REPO}/src/mt5311d.uc"
 NETWORK = {"model": {"id": "test,board", "name": "Test"}}
+
+# The version as written in the source, which a release tag has to match.
+VERSION = re.search(r"^const VERSION = '([^']+)';$",
+                    (Path(__file__).parent.parent / "src/mt5311d.uc").read_text(),
+                    re.MULTILINE)[1]
+
+# The options with which the generic tests of the openwrt/packages CI look for
+# the package version in the output of every executable, in their order.
+CI_VERSION_OPTIONS = ("--version", "-version", "version", "-v", "-V", "--help", "-help", "-?")
 
 
 def uci_config(**options):
@@ -92,7 +103,7 @@ def test_metrics_and_statistics(run_daemon, simulator):
     assert metrics["state"] == "Showtime with TC-Layer sync"
     assert metrics["up"] is True
     assert metrics["uptime"] == 100
-    assert metrics["driver_version"] == "mt5311d 0.1.0"
+    assert metrics["driver_version"] == f"mt5311d {VERSION}"
     assert metrics["downstream"]["data_rate"] == line.status.downstream.data_rate * 1000
     assert result["call:statistics"]["bands"]["downstream"]["limits"][0] == {
         "first": line.status.downstream.tones[0][0],
@@ -156,3 +167,40 @@ def test_missing_configuration(run_daemon):
     result = run_daemon("", NETWORK, wait_for_object=False)
     assert result["exit"] == 1
     assert "section mt5311d.main is missing" in result["log"]
+
+
+@pytest.fixture
+def run_options(execute):
+    """Runs the daemon with command line options only; returns exit code, stdout, stderr."""
+    def run_options(*options):
+        return execute(["ucode", "-L", f"{CONTAINER_REPO}/src/*.uc", DAEMON, *options])
+
+    return run_options
+
+
+def test_version(run_options):
+    assert run_options("-v") == (0, f"mt5311d {VERSION}\n", "")
+
+
+def test_help(run_options):
+    returncode, stdout, stderr = run_options("-h")
+    assert (returncode, stderr) == (0, "")
+    assert stdout.startswith("usage: mt5311d ")
+
+
+@pytest.mark.parametrize("options", [("-x",), ("-c",), ("version",)])
+def test_invalid_options(run_options, options):
+    returncode, stdout, stderr = run_options(*options)
+    assert (returncode, stdout) == (1, "")
+    assert stderr.startswith("usage: mt5311d ")
+
+
+def test_ci_version_check(run_options):
+    # Every option ends at once, before reading a configuration, and one of them
+    # prints the version.
+    outputs = []
+    for option in CI_VERSION_OPTIONS:
+        returncode, stdout, stderr = run_options(option)
+        assert returncode in (0, 1), option
+        outputs.append(stdout + stderr)
+    assert any(VERSION in output for output in outputs)
