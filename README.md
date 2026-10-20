@@ -173,6 +173,10 @@ task test      # builds the test image on the first run
 task check     # syntax check of all ucode sources
 ```
 
+To release, raise `VERSION` in [`src/mt5311d.uc`](src/mt5311d.uc), commit, tag the
+commit with `task tag` (the tag is the version, e.g. `0.2.0`) and push the branch and
+the tag. The package Makefile's `PKG_VERSION` is this tag.
+
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).
