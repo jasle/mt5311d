@@ -138,6 +138,8 @@ stops; an entry of a board with a built-in modem is left alone.
 
 ## Diagnostics
 
+`mt5311d -v` prints the installed version, `mt5311d -h` the command line options.
+
 [`tools/mt5311-probe.uc`](tools/mt5311-probe.uc) reads a modem once and prints the
 firmware, the selected address layout and all values mt5311d knows as JSON. It only
 sends CONNECT and READ requests. On a router with `ucode-mod-socket`,

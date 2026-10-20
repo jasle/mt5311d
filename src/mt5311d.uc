@@ -3,9 +3,11 @@
 // status on ubus as object "dsl", like the Lantiq DSL daemon.
 //
 //   mt5311d [-c <uci-dir>] [-s <ubus-socket>] [-b <board.json>] [-f]
+//   mt5311d -v | -h
 //
 // -c, -s and -b override the UCI directory, the ubus socket and the path of
-// board.json; -f logs to stderr in addition to syslog.
+// board.json; -f logs to stderr in addition to syslog. -v prints the version,
+// -h the usage.
 
 'use strict';
 
@@ -20,15 +22,18 @@ import * as session from 'mt5311d.session';
 
 const VERSION = '0.1.0';
 const BOARD_ENTRY = { type: 'vdsl' };
+const USAGE = 'usage: mt5311d [-c <uci-dir>] [-s <ubus-socket>] [-b <board.json>] [-f]\n' +
+              '       mt5311d -v | -h\n';
 
 function parse_args(argv) {
 	const args = { confdir: null, socket: null, board: '/etc/board.json', stderr: false };
+	const flags = { '-f': 'stderr', '-v': 'version', '-h': 'help' };
 
 	for (let i = 0; i < length(argv); i++) {
 		const option = argv[i];
 
-		if (option == '-f') {
-			args.stderr = true;
+		if (option in flags) {
+			args[flags[option]] = true;
 			continue;
 		}
 
@@ -46,8 +51,18 @@ function parse_args(argv) {
 const args = parse_args(ARGV);
 
 if (args == null) {
-	warn('usage: mt5311d [-c <uci-dir>] [-s <ubus-socket>] [-b <board.json>] [-f]\n');
+	warn(USAGE);
 	exit(1);
+}
+
+if (args.version) {
+	print(`mt5311d ${VERSION}\n`);
+	exit(0);
+}
+
+if (args.help) {
+	print(USAGE);
+	exit(0);
 }
 
 log.ulog_open(args.stderr ? log.ULOG_SYSLOG | log.ULOG_STDIO : log.ULOG_SYSLOG,
